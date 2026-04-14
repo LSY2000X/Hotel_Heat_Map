@@ -1607,5 +1607,213 @@ el("applyMapBtn").addEventListener("click",()=>{
   if(src==="tianditu"&&!key){alert("请输入天地图 token");return;}
   localStorage.setItem("mapSource",src);localStorage.setItem("tdKey",key);
   map.setStyle(buildBaseStyle(src,key));
-  map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();});
+  map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();_tsBound=false;if(tsWeekMap)onMapReady(()=>{_ensureTsLayers();tsShowWeek(tsCurrentIdx);});});
+
+// ============================================================
+// 4 · 动态热力图（时序模式）
+// ============================================================
+const TS_HEAT_SRC='ts-heat-src',TS_HEAT_LYR='ts-heat-lyr';
+const TS_SD_SRC='ts-sd-src',TS_SD_FILL='ts-sd-fill',TS_SD_LINE='ts-sd-line';
+let tsWeekMap=null,tsWeeks=[],tsCurrentIdx=0;
+let tsPlaying=false,tsTimer=null,tsSpeed=1;
+let _tsBound=false;
+
+// 解析时序数据：按 Week 列分组
+function _parseTsData(validRows){
+  const map=new Map();
+  for(const r of validRows){
+    const w=String(r.Week||'').trim().toUpperCase();
+    if(!/^W([1-9]|10)$/.test(w))continue;
+    if(!map.has(w))map.set(w,[]);
+    map.get(w).push(r);
+  }
+  const sorted=[...map.keys()].sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
+  return{map,sorted};
+}
+
+// 处理时序原始行（保留 Week 列）
+function _processTsRawRows(allRows){
+  if(!allRows||allRows.length<2)throw new Error('文件内容为空或仅含表头行。');
+  const header=allRows[0];
+  let weekIdx=-1;
+  for(let i=0;i<header.length;i++){if(String(header[i]||'').trim().toLowerCase()==='week'){weekIdx=i;break;}}
+  if(weekIdx===-1)throw new Error('未找到 Week 列（表头需包含 "Week"，内容为 W1–W10）。');
+  const dataRows=allRows.slice(1);
+  const valid=[];let skipped=0;
+  for(const row of dataRows){
+    if(!row||row.length===0){skipped++;continue;}
+    const lonVal=safeNum(row[4]),latVal=safeNum(row[5]);
+    if(lonVal===null||latVal===null||!isFinite(lonVal)||!isFinite(latVal)){skipped++;continue;}
+    if(latVal<-90||latVal>90||lonVal<-180||lonVal>180){skipped++;continue;}
+    const impVal=safeNum(row[1])??0,clkVal=safeNum(row[2])??0,ordVal=safeNum(row[3])??0;
+    const starVal=safeNum(row[6])??0,listVal=safeNum(row[7])??0;
+    const nameVal=row[8]!=null&&row[8]!==''?String(row[8]).trim():'';
+    const gmvVal=safeNum(row[9])??0;
+    const weekVal=weekIdx>=0?String(row[weekIdx]||'').trim().toUpperCase():'';
+    const entry={id:row[0]??'',name:nameVal,lat:latVal,lon:lonVal,Week:weekVal};
+    entry[IMP]=impVal;entry[CLK]=clkVal;entry[ORD]=ordVal;
+    entry[STAR]=starVal;entry[LIST]=listVal;entry[GMV]=gmvVal;
+    valid.push(entry);
+  }
+  return{valid,skipped};
+}
+
+// 构建平滑热力图 GeoJSON（曝光/点击/订单）
+function _buildTsHeatGeoJSON(rows,field){
+  let maxW=0;
+  for(const r of rows){const v=Number(r[field])||0;if(v>maxW)maxW=v;}
+  if(maxW===0)maxW=1;
+  const features=rows.filter(r=>r.lat&&r.lon).map(r=>({
+    type:'Feature',
+    geometry:{type:'Point',coordinates:[r.lon,r.lat]},
+    properties:{weight:(Number(r[field])||0)/maxW}
+  }));
+  return{type:'FeatureCollection',features};
+}
+
+// 构建供需 H3 六边形 GeoJSON
+function _buildTsSDGeoJSON(rows,resolution){
+  const agg=new Map();
+  for(const r of rows){
+    if(!r.lat||!r.lon)continue;
+    const cell=h3Cell(r.lat,r.lon,resolution);
+    const cur=agg.get(cell)||{imp:0,ord:0};
+    cur.imp+=Number(r[IMP])||0;cur.ord+=Number(r[ORD])||0;
+    agg.set(cell,cur);
+  }
+  const totalImp=[...agg.values()].reduce((s,v)=>s+v.imp,0);
+  const totalOrd=[...agg.values()].reduce((s,v)=>s+v.ord,0);
+  const features=[];
+  for(const [cell,v] of agg){
+    if(v.imp<5||totalImp===0||totalOrd===0)continue;
+    const score=Math.log((v.ord/totalOrd)/(v.imp/totalImp))/Math.LN2;
+    if(!Number.isFinite(score))continue;
+    features.push({type:'Feature',properties:{score:Math.max(-4,Math.min(4,score))},geometry:{type:'Polygon',coordinates:[h3Boundary(cell)]}});
+  }
+  return{type:'FeatureCollection',features};
+}
+
+// 确保 TS 图层存在
+function _ensureTsLayers(){
+  if(!map.getSource(TS_HEAT_SRC)){
+    map.addSource(TS_HEAT_SRC,{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({id:TS_HEAT_LYR,type:'heatmap',source:TS_HEAT_SRC,paint:{
+      'heatmap-weight':['get','weight'],
+      'heatmap-radius':['interpolate',['linear'],['zoom'],7,12,10,28,13,52],
+      'heatmap-intensity':['interpolate',['linear'],['zoom'],7,1.2,11,2,14,3.5],
+      'heatmap-opacity':0.88,
+      'heatmap-color':['interpolate',['linear'],['heatmap-density'],
+        0,'rgba(255,255,255,0)',
+        0.12,'rgba(255,245,235,0.5)',
+        0.35,'rgba(255,175,100,0.72)',
+        0.65,'rgba(220,50,25,0.88)',
+        1,'rgba(160,0,0,1)']
+    }});
+  }
+  if(!map.getSource(TS_SD_SRC)){
+    map.addSource(TS_SD_SRC,{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    const sdColor=['interpolate',['linear'],['get','score'],
+      -4,'#1e3a8a',-2,'#1d4ed8',-1,'#60a5fa',
+      -0.3,'#bfdbfe',0,'#f3f4f6',0.3,'#fecaca',
+      1,'#f87171',2,'#dc2626',4,'#7f1d1d'];
+    map.addLayer({id:TS_SD_FILL,type:'fill',source:TS_SD_SRC,paint:{'fill-color':sdColor,'fill-opacity':0.78}});
+    map.addLayer({id:TS_SD_LINE,type:'line',source:TS_SD_SRC,paint:{'line-color':sdColor,'line-width':0.8,'line-opacity':0.7}});
+  }
+  if(!_tsBound){
+    _tsBound=true;
+    map.on('mousemove',TS_SD_FILL,(e)=>{
+      if(!e.features?.length)return;
+      const score=Number(e.features[0].properties.score);
+      const label=score>0.3?'欠曝':score<-0.3?'过曝':'均衡';
+      map.getCanvas().style.cursor='default';
+      const popup=document.getElementById('tsTooltip');
+      if(popup){popup.style.display='block';popup.textContent=`${label}（log₂ ${score.toFixed(2)}）`;}
+    });
+    map.on('mouseleave',TS_SD_FILL,()=>{const p=document.getElementById('tsTooltip');if(p)p.style.display='none';});
+  }
+}
+
+// 隐藏所有 TS 图层
+function _hideTsLayers(){
+  showLayer(TS_HEAT_LYR,false);
+  showLayer(TS_SD_FILL,false);
+  showLayer(TS_SD_LINE,false);
+}
+
+// 显示指定周
+function tsShowWeek(idx){
+  tsCurrentIdx=idx;
+  const weekKey=tsWeeks[idx];
+  const rows=tsWeekMap.get(weekKey);
+  const metric=el('tsMetricSelect').value;
+  const resolution=Number(el('resSelect').value)||8;
+  el('tsScrubber').value=idx;
+  el('tsWeekLabel').textContent=weekKey;
+  el('tsWeekOverlay').textContent=weekKey;
+  _ensureTsLayers();
+  if(metric==='sd'){
+    map.getSource(TS_SD_SRC).setData(_buildTsSDGeoJSON(rows,resolution));
+    showLayer(TS_HEAT_LYR,false);showLayer(TS_SD_FILL,true);showLayer(TS_SD_LINE,true);
+  }else{
+    const fieldMap={imp:IMP,clk:CLK,ord:ORD};
+    map.getSource(TS_HEAT_SRC).setData(_buildTsHeatGeoJSON(rows,fieldMap[metric]));
+    showLayer(TS_HEAT_LYR,true);showLayer(TS_SD_FILL,false);showLayer(TS_SD_LINE,false);
+  }
+}
+
+// 播放 / 暂停
+function tsPlay(){
+  if(tsPlaying)return;
+  tsPlaying=true;el('tsPlayBtn').textContent='⏸';
+  tsTimer=setInterval(()=>{tsShowWeek((tsCurrentIdx+1)%tsWeeks.length);},Math.round(1000/tsSpeed));
+}
+function tsPause(){
+  if(!tsPlaying)return;
+  tsPlaying=false;el('tsPlayBtn').textContent='▶';
+  clearInterval(tsTimer);tsTimer=null;
+}
+
+// 处理时序文件上传
+async function handleTsFile(file){
+  el('tsMsgHint').textContent='解析中…';
+  tsPause();
+  try{
+    const buf=await file.arrayBuffer();
+    const allRows=await parseFileWithWorker(buf);
+    const{valid,skipped}=_processTsRawRows(allRows);
+    if(!valid.length)throw new Error('未找到有效数据行，请确认文件格式及 Week 列内容（W1–W10）。');
+    const{map:wMap,sorted}=_parseTsData(valid);
+    if(!sorted.length)throw new Error('Week 列未找到 W1–W10 格式内容。');
+    tsWeekMap=wMap;tsWeeks=sorted;tsCurrentIdx=0;
+    el('tsScrubber').max=sorted.length-1;el('tsScrubber').value=0;
+    // 生成刻度标签
+    const tickRow=el('tsTickRow');tickRow.innerHTML='';
+    sorted.forEach(w=>{const s=document.createElement('span');s.className='ts-tick';s.textContent=w;tickRow.appendChild(s);});
+    el('tsWeekLabel').textContent=sorted[0];
+    el('tsWeekCount').textContent=`共 ${sorted.length} 周`;
+    el('tsControlsWrap').classList.remove('hidden');
+    el('tsMsgHint').textContent=`已加载 ${sorted.length} 周数据 ✓（跳过 ${skipped} 行无效）`;
+    el('tsWeekOverlay').style.display='block';
+    el('tsWeekOverlay').textContent=sorted[0];
+    onMapReady(()=>{_ensureTsLayers();tsShowWeek(0);});
+  }catch(err){el('tsMsgHint').textContent=`❌ ${err.message}`;}
+}
+
+// 事件绑定
+el('tsUploadBtn').addEventListener('click',()=>el('tsFileInput').click());
+el('tsFileInput').addEventListener('change',(e)=>{const f=e.target.files?.[0];if(f){handleTsFile(f);e.target.value='';}});
+el('tsPlayBtn').addEventListener('click',()=>{tsPlaying?tsPause():tsPlay();});
+el('tsScrubber').addEventListener('input',()=>{tsPause();tsShowWeek(Number(el('tsScrubber').value));});
+el('tsMetricSelect').addEventListener('change',()=>{if(tsWeekMap)tsShowWeek(tsCurrentIdx);});
+document.querySelectorAll('.ts-speed-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.ts-speed-btn').forEach(b=>b.classList.remove('ts-speed-active'));
+    btn.classList.add('ts-speed-active');
+    tsSpeed=parseFloat(btn.dataset.speed);
+    if(tsPlaying){tsPause();tsPlay();}
+  });
+});
+// ============================================================
+// end 动态热力图
+// ============================================================
 });

@@ -135,3 +135,13 @@
     .city-btn.city-active{border-color:rgba(0,122,255,0.6);background:rgba(0,122,255,0.13);color:#007aff;font-weight:700;}
     .upload-btn.upload-locked{opacity:0.38;pointer-events:none;cursor:not-allowed;border-style:dashed;}
     .city-hint{font-size:11.5px;color:var(--muted);margin-bottom:9px;display:flex;align-items:center;gap:5px;}
+    /* ===== 动态热力图 TS 模块 ===== */
+    .ts-play-btn{width:40px;height:40px;border-radius:50%;border:none;background:#007aff;color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background 0.15s;box-shadow:0 2px 8px rgba(0,122,255,0.35);}
+    .ts-play-btn:hover{background:#005ec4;}
+    .ts-scrubber{width:100%;-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:rgba(0,0,0,0.1);outline:none;cursor:pointer;}
+    .ts-scrubber::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#007aff;cursor:pointer;box-shadow:0 1px 5px rgba(0,122,255,0.45);}
+    .ts-scrubber::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#007aff;cursor:pointer;border:none;}
+    .ts-speed-btn{padding:3px 9px;border-radius:7px;border:1px solid rgba(0,0,0,0.12);background:rgba(255,255,255,0.8);font-size:11px;color:var(--muted);cursor:pointer;transition:all 0.13s;}
+    .ts-speed-btn:hover{border-color:#007aff;color:#007aff;}
+    .ts-speed-active{background:#007aff!important;color:#fff!important;border-color:#007aff!important;}
+    .ts-tick{font-size:10px;color:var(--muted);}

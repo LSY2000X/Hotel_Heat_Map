@@ -282,6 +282,45 @@
       <div id="evtError" class="msg msg-error hidden" style="margin-top:8px;"></div>
       <div id="evtInfo" class="msg msg-info hidden" style="margin-top:8px;"></div>
     </div>
+    <!-- 4 · 动态热力图 -->
+    <div class="card" id="tsCard">
+      <p class="sec-label">4 · 动态热力图</p>
+      <p style="font-size:12px;color:var(--muted);line-height:1.55;margin:0 0 11px;">上传含 <strong>Week</strong> 列（W1–W10）的数据，生成城市热力随时间的动态变化。</p>
+      <input type="file" id="tsFileInput" accept=".xlsx,.csv" style="display:none">
+      <button id="tsUploadBtn" class="refresh-btn" style="width:100%;margin-bottom:6px;">📂 上传时序数据</button>
+      <div id="tsMsgHint" style="font-size:11.5px;color:var(--muted);min-height:16px;margin-bottom:8px;"></div>
+      <div id="tsControlsWrap" class="hidden">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <span style="font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap;">指标</span>
+          <div class="select-wrap" style="flex:1;">
+            <select id="tsMetricSelect">
+              <option value="imp">曝光</option>
+              <option value="clk">点击</option>
+              <option value="ord">订单</option>
+              <option value="sd">供需</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:10px;">
+          <button id="tsPlayBtn" class="ts-play-btn">▶</button>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+              <span id="tsWeekLabel" style="font-size:17px;font-weight:700;color:#007aff;letter-spacing:0.5px;">W1</span>
+              <span id="tsWeekCount" style="font-size:11px;color:var(--muted);">共 1 周</span>
+            </div>
+            <input type="range" id="tsScrubber" class="ts-scrubber" min="0" max="0" value="0" step="1">
+            <div id="tsTickRow" style="display:flex;justify-content:space-between;margin-top:5px;padding:0 1px;"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:5px;justify-content:flex-end;align-items:center;margin-top:10px;">
+          <span style="font-size:11px;color:var(--muted);margin-right:2px;">速度</span>
+          <button class="ts-speed-btn" data-speed="0.5">0.5x</button>
+          <button class="ts-speed-btn ts-speed-active" data-speed="1">1x</button>
+          <button class="ts-speed-btn" data-speed="2">2x</button>
+          <button class="ts-speed-btn" data-speed="4">4x</button>
+        </div>
+      </div>
+    </div>
     <div class="card" id="diagCard" style="display:none;"><!-- 暂时隐藏，代码保留 -->
       <p class="sec-label">4 · 区块诊断</p>
       <p style="font-size:12px;color:var(--muted);line-height:1.55;margin:0 0 11px;">识别流量效率异常的区域，辅助排序策略调优。好/差区块可同时展示，hover 查看每条判定原因。格子最低曝光门槛在「2 · 显示设置」中配置，全页按格子统计的功能共用。</p>
@@ -375,6 +414,7 @@
   </div>
   <main class="main">
     <div class="map-pill">上海酒店热力图 · 点击格子查看详情 · hover 显示数值</div>
+    <div id="tsWeekOverlay" style="display:none;position:absolute;top:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.62);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;padding:6px 22px;border-radius:24px;font-size:20px;font-weight:700;letter-spacing:2px;z-index:10;pointer-events:none;">W1</div>
     <div id="map"></div>
   </main>
 </div>
