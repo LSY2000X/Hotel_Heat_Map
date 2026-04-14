@@ -273,6 +273,7 @@ function renderDiffLegend(absThresholds,mode,metric){
 }
 function renderDiffComparison(){
   if(!mainRows||!mainRows.length||!compareRows||!compareRows.length)return false;
+  _hideTsLayers();
   const resolution=Number(el("resSelect").value);
   const metric=el("evtDiffMetricSelect").value;
   const diffMode=el("evtDiffModeSelect").value;
@@ -907,6 +908,7 @@ function clearAllDiagLayers(){
 // ---- end 区块诊断 ----
 function aggregateAndRender(){
   if(!cachedRows||!cachedRows.length)return;
+  _hideTsLayers();
   const resolution=Number(el("resSelect").value),binMethod=el("binSelect").value,metric=el("metricSelect").value;
   const isSD=metric===SD,isSDGMV=metric===SDGMV,isSDCLK=metric===SDCLK,isSDType=isSD||isSDGMV||isSDCLK,isAvg=AVG_METRICS.has(metric);
   const binCount=isSDType?10:Number(el("binCountSelect").value);
@@ -1607,7 +1609,7 @@ el("applyMapBtn").addEventListener("click",()=>{
   if(src==="tianditu"&&!key){alert("请输入天地图 token");return;}
   localStorage.setItem("mapSource",src);localStorage.setItem("tdKey",key);
   map.setStyle(buildBaseStyle(src,key));
-  map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();_tsBound=false;if(tsWeekMap)onMapReady(()=>{_ensureTsLayers();tsShowWeek(tsCurrentIdx);});});
+  map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();map.off('mousemove',TS_SD_FILL,_tsSdHoverHandler);map.off('mouseleave',TS_SD_FILL,_tsSdLeaveHandler);_tsBound=false;if(tsWeekMap)onMapReady(()=>{_ensureTsLayers();tsShowWeek(tsCurrentIdx);});});
 
 // ============================================================
 // 4 · 动态热力图（时序模式）
@@ -1693,6 +1695,20 @@ function _buildTsSDGeoJSON(rows,resolution){
   return{type:'FeatureCollection',features};
 }
 
+// SD hover 命名处理器（便于 map.off 移除，避免 style change 后重复绑定）
+function _tsSdHoverHandler(e){
+  if(!e.features?.length)return;
+  const score=Number(e.features[0].properties.score);
+  const label=score>0.3?'欠曝':score<-0.3?'过曝':'均衡';
+  map.getCanvas().style.cursor='default';
+  const popup=el('tsTooltip');
+  if(popup){popup.style.display='block';popup.textContent=`供需：${label}（log₂ ${score.toFixed(2)}）`;}
+}
+function _tsSdLeaveHandler(){
+  map.getCanvas().style.cursor='';
+  const p=el('tsTooltip');if(p)p.style.display='none';
+}
+
 // 确保 TS 图层存在
 function _ensureTsLayers(){
   if(!map.getSource(TS_HEAT_SRC)){
@@ -1721,15 +1737,8 @@ function _ensureTsLayers(){
   }
   if(!_tsBound){
     _tsBound=true;
-    map.on('mousemove',TS_SD_FILL,(e)=>{
-      if(!e.features?.length)return;
-      const score=Number(e.features[0].properties.score);
-      const label=score>0.3?'欠曝':score<-0.3?'过曝':'均衡';
-      map.getCanvas().style.cursor='default';
-      const popup=document.getElementById('tsTooltip');
-      if(popup){popup.style.display='block';popup.textContent=`${label}（log₂ ${score.toFixed(2)}）`;}
-    });
-    map.on('mouseleave',TS_SD_FILL,()=>{const p=document.getElementById('tsTooltip');if(p)p.style.display='none';});
+    map.on('mousemove',TS_SD_FILL,_tsSdHoverHandler);
+    map.on('mouseleave',TS_SD_FILL,_tsSdLeaveHandler);
   }
 }
 
