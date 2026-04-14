@@ -33,7 +33,7 @@ function _getModeContext(){
 const SH_BBOX={minLon:120.8,maxLon:122.0,minLat:30.5,maxLat:31.9};
 const IMP="曝光",CLK="点击",ORD="订单",STAR="星级",LIST="挂牌",GMV="订单额";
 const SD="供需情况",SDGMV="供需·GMV",SDCLK="供需·点击";
-const METRIC_UNIT={"曝光":"次","点击":"次","订单":"单","供需情况":"(log₂)","供需·GMV":"(log₂)","供需·点击":"(log₂)","星级":"星","挂牌":"","极好酒店":"元/次","极差酒店":"元/次"};
+const METRIC_UNIT={"曝光":"次","点击":"次","订单":"单","供需情况":"(log₂)","供需·GMV":"(log₂)","供需·点击":"(log₂)","供需":"万分点","星级":"星","挂牌":"","极好酒店":"元/次","极差酒店":"元/次"};
 // 对比聚合使用的是英文字段键（imp/clk/ord），不能直接用中文展示名
 const DIFF_METRIC_FIELD={曝光:"imp",点击:"clk",订单:"ord"};
 const DIFF_MODE_LABEL={relative:"相对变化",absolute:"绝对变化"};
@@ -288,18 +288,34 @@ function renderDiffComparison(){
     el("evtInfo").classList.remove("hidden");
     return true;
   }
-  const totalBase=cells.reduce((s,cell)=>s+((mainAgg.get(cell)?.[metricField])||0),0);
-  const totalComp=cells.reduce((s,cell)=>s+((compareAgg.get(cell)?.[metricField])||0),0);
-  const globalRatio=totalBase>0?(totalComp/totalBase):1;
+  const isSD=metric==="供需";
+  let globalRatio;
+  if(isSD){
+    const tmi=cells.reduce((s,c)=>s+((mainAgg.get(c)?.imp)||0),0),tmo=cells.reduce((s,c)=>s+((mainAgg.get(c)?.ord)||0),0);
+    const tci=cells.reduce((s,c)=>s+((compareAgg.get(c)?.imp)||0),0),tco=cells.reduce((s,c)=>s+((compareAgg.get(c)?.ord)||0),0);
+    const gcrM=tmi>0?tmo/tmi:0,gcrC=tci>0?tco/tci:0;
+    globalRatio=gcrM>0?gcrC/gcrM:1;
+  }else{
+    const totalBase=cells.reduce((s,cell)=>s+((mainAgg.get(cell)?.[metricField])||0),0);
+    const totalComp=cells.reduce((s,cell)=>s+((compareAgg.get(cell)?.[metricField])||0),0);
+    globalRatio=totalBase>0?(totalComp/totalBase):1;
+  }
   const tmp=[];
   cells.forEach((cell)=>{
     const a=mainAgg.get(cell)||{imp:0,clk:0,ord:0,count:0,indices:[]};
     const b=compareAgg.get(cell)||{imp:0,clk:0,ord:0,count:0,indices:[]};
-    const base=a[metricField]||0;
-    const comp=b[metricField]||0;
-    const delta=diffMode==="relative"
-      ?(base>0?((comp-base*globalRatio)/(base*globalRatio)*100):(comp>0?100:0))
-      :(comp-base);
+    let delta;
+    if(isSD){
+      const crM=a.imp>0?a.ord/a.imp:0,crC=b.imp>0?b.ord/b.imp:0;
+      delta=diffMode==="relative"
+        ?(crM>0?((crC-crM*globalRatio)/(crM*globalRatio)*100):(crC>0?100:0))
+        :((crC-crM)*10000);
+    }else{
+      const base=a[metricField]||0,comp=b[metricField]||0;
+      delta=diffMode==="relative"
+        ?(base>0?((comp-base*globalRatio)/(base*globalRatio)*100):(comp>0?100:0))
+        :(comp-base);
+    }
     tmp.push({cell,a,b,delta});
   });
   const absThresholds=_buildAbsThresholdsForMode(tmp.map(x=>x.delta),diffMode);
@@ -310,7 +326,7 @@ function renderDiffComparison(){
       type:"Feature",
       properties:{
         h3:cell,metric:`对比-${metric}`,diffMode,bin,value:d,
-        preVal:a[metricField]||0,postVal:b[metricField]||0,
+        preVal:isSD?(a.imp>0?a.ord/a.imp:0):(a[metricField]||0),postVal:isSD?(b.imp>0?b.ord/b.imp:0):(b[metricField]||0),
         preImp:a.imp||0,postImp:b.imp||0,preCount:a.count||0,postCount:b.count||0,
         mainIndices:JSON.stringify(a.indices||[]),compareIndices:JSON.stringify(b.indices||[])
       },
@@ -328,8 +344,8 @@ function renderDiffComparison(){
   el("statCells").textContent=features.length.toLocaleString();
   el("statSumLabel").textContent="上升 / 下降 / 平稳";
   el("statSum").textContent=`${rise} / ${fall} / ${flat}`;
-  const ratioTxt=Number.isFinite(globalRatio)?`，全城总量倍率=${globalRatio.toFixed(3)}x`:"";
-  el("evtInfo").textContent=`对比模式：${DIFF_MODE_LABEL[diffMode]}（对比-主），指标=${metric}，仅展示主数据曝光≥${minImp}的格子${diffMode==="relative"?ratioTxt:""}。`;
+  const ratioTxt=Number.isFinite(globalRatio)?`，全城${isSD?"CR":"总量"}倍率=${globalRatio.toFixed(3)}x`:"";
+  el("evtInfo").textContent=`对比模式：${DIFF_MODE_LABEL[diffMode]}（对比-主），指标=${metric}${isSD?"（CR变化：蓝=过曝趋势，红=欠曝趋势）":""}，仅展示主数据曝光≥${minImp}的格子${diffMode==="relative"?ratioTxt:""}。`;
   el("evtInfo").classList.remove("hidden");
   return true;
 }
@@ -534,9 +550,13 @@ function updateHeatLayer(geojson,palette,binCount){
           const isRel=p.diffMode==="relative";
           const delta=Number(p.value);
           const sign=delta>0?"+":"";
-          const deltaText=!Number.isFinite(delta)?"—":(isRel?`${sign}${delta.toFixed(2)}%`:`${sign}${Math.round(delta).toLocaleString()} ${METRIC_UNIT[m]||""}`);
+          const _isSdM=m==="供需";
+          const deltaText=!Number.isFinite(delta)?"—":(isRel?`${sign}${delta.toFixed(2)}%`:(_isSdM?`${sign}${delta.toFixed(1)} 万分点`:`${sign}${Math.round(delta).toLocaleString()} ${METRIC_UNIT[m]||""}`));
           const color=delta>10?"#dc2626":delta<-10?"#1d4ed8":"#6b7280";
-          html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${color};">${p.metric}：${deltaText}</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>主数据：${Math.round(p.preVal).toLocaleString()} ${METRIC_UNIT[m]||""}</span><span>对比数据：${Math.round(p.postVal).toLocaleString()} ${METRIC_UNIT[m]||""}</span><span>主曝光：${Math.round(p.preImp).toLocaleString()}</span><span>对比曝光：${Math.round(p.postImp).toLocaleString()}</span><span>主酒店数：${p.preCount} 家</span><span>对比酒店数：${p.postCount} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
+          const fmtCR=(v)=>(Number(v)*100).toFixed(3)+"%";
+          const preStr=_isSdM?fmtCR(p.preVal):`${Math.round(p.preVal).toLocaleString()} ${METRIC_UNIT[m]||""}`;
+          const postStr=_isSdM?fmtCR(p.postVal):`${Math.round(p.postVal).toLocaleString()} ${METRIC_UNIT[m]||""}`;
+          html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${color};">${p.metric}：${deltaText}</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>${_isSdM?"主CR":"主数据"}：${preStr}</span><span>${_isSdM?"对比CR":"对比数据"}：${postStr}</span><span>主曝光：${Math.round(p.preImp).toLocaleString()}</span><span>对比曝光：${Math.round(p.postImp).toLocaleString()}</span><span>主酒店数：${p.preCount} 家</span><span>对比酒店数：${p.postCount} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
         }else if(p.metric===SD||p.metric===SDGMV||p.metric===SDCLK){
           const isG=p.metric===SDGMV,isCLK=p.metric===SDCLK,score=p.value,isLD=p.bin===10;
           const label=isLD?"数据不足":score>0.1?"欠曝":score<-0.1?"过曝":"均衡";
