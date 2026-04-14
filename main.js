@@ -1662,14 +1662,17 @@ function _processTsRawRows(allRows){
 }
 
 // 构建平滑热力图 GeoJSON（曝光/点击/订单）
+// 使用 log1p 归一化防止单一热点遮蔽其他区域：
+//   weight = log(1+v) / log(1+max)
+// 典型效果：原始比 1000:1 → log 压缩后 11.5:4.6（约 2.5:1），低值区域仍可见
 function _buildTsHeatGeoJSON(rows,field){
-  let maxW=0;
-  for(const r of rows){const v=Number(r[field])||0;if(v>maxW)maxW=v;}
-  if(maxW===0)maxW=1;
+  let maxLogW=0;
+  for(const r of rows){const v=Math.log1p(Number(r[field])||0);if(v>maxLogW)maxLogW=v;}
+  if(maxLogW===0)maxLogW=1;
   const features=rows.filter(r=>r.lat&&r.lon).map(r=>({
     type:'Feature',
     geometry:{type:'Point',coordinates:[r.lon,r.lat]},
-    properties:{weight:(Number(r[field])||0)/maxW}
+    properties:{weight:Math.log1p(Number(r[field])||0)/maxLogW}
   }));
   return{type:'FeatureCollection',features};
 }
