@@ -1610,6 +1610,7 @@ el("applyMapBtn").addEventListener("click",()=>{
   localStorage.setItem("mapSource",src);localStorage.setItem("tdKey",key);
   map.setStyle(buildBaseStyle(src,key));
   map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();map.off('mousemove',TS_SD_FILL,_tsSdHoverHandler);map.off('mouseleave',TS_SD_FILL,_tsSdLeaveHandler);_tsBound=false;if(tsWeekMap)onMapReady(()=>{_ensureTsLayers();tsShowWeek(tsCurrentIdx);});});
+});
 
 // ============================================================
 // 4 · 动态热力图（时序模式）
@@ -1825,4 +1826,3 @@ document.querySelectorAll('.ts-speed-btn').forEach(btn=>{
 // ============================================================
 // end 动态热力图
 // ============================================================
-});
