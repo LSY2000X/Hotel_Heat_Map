@@ -207,13 +207,14 @@ function _aggregateRowsByCell(rows,resolution){
 }
 function _buildAbsThresholdsForMode(values,mode){
   if(mode==="relative")return [...DIFF_MAG_THRESHOLDS_REL];
-  const absVals=values.map(v=>Math.abs(v)).filter(v=>Number.isFinite(v)).sort((a,b)=>a-b);
+  const absVals=values.map(v=>Math.abs(v)).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
   if(!absVals.length)return [1,2,5,10,20];
-  const t1=Math.max(quantileVal(absVals,0.35),1);
-  const t2=Math.max(quantileVal(absVals,0.55),t1+1);
-  const t3=Math.max(quantileVal(absVals,0.72),t2+1);
-  const t4=Math.max(quantileVal(absVals,0.86),t3+1);
-  const t5=Math.max(quantileVal(absVals,0.95),t4+1);
+  const t1=quantileVal(absVals,0.35)||absVals[0];
+  const eps=Math.max(t1*0.001,1e-9);
+  const t2=Math.max(quantileVal(absVals,0.55),t1+eps);
+  const t3=Math.max(quantileVal(absVals,0.72),t2+eps);
+  const t4=Math.max(quantileVal(absVals,0.86),t3+eps);
+  const t5=Math.max(quantileVal(absVals,0.95),t4+eps);
   return [t1,t2,t3,t4,t5];
 }
 function _assignDiffBin(v,absThresholds){
@@ -230,6 +231,9 @@ function _assignDiffBin(v,absThresholds){
 function renderDiffLegend(absThresholds,mode,metric){
   const box=el("legendBox");
   box.innerHTML="";
+  const isAbsNonSD=mode!=="relative"&&metric!=="供需";
+  const fmtAbsVal=v=>isAbsNonSD?Number(v).toFixed(3):fmt(v);
+  const absUnit=metric==="供需"?"万分点":"pp";
   const hdr=document.createElement("div");
   hdr.style.cssText="grid-column:1/-1;display:flex;justify-content:space-between;font-size:11px;font-weight:600;margin-bottom:6px;gap:4px;";
   hdr.innerHTML='<span style="flex:1;text-align:center;background:rgba(29,78,216,0.1);color:#1d4ed8;border-radius:6px;padding:2px 0;">对比下降（蓝）</span><span style="flex:1;text-align:center;background:rgba(220,38,38,0.1);color:#dc2626;border-radius:6px;padding:2px 0;">对比上升（红）</span>';
@@ -241,26 +245,26 @@ function renderDiffLegend(absThresholds,mode,metric){
     const lab=document.createElement("div");
     lab.className="swatch-lab";
     if(i===0){
-      lab.textContent=mode==="relative"?`< -${absThresholds[4].toFixed(1)}%`:`< -${fmt(absThresholds[4])} ${METRIC_UNIT[metric]||""}`;
+      lab.textContent=mode==="relative"?`< -${absThresholds[4].toFixed(1)}%`:`< -${fmtAbsVal(absThresholds[4])} ${absUnit}`;
     }else if(i===4){
-      lab.textContent=mode==="relative"?`- ${absThresholds[0].toFixed(1)}% ~ 0%（浅蓝）`:`- ${fmt(absThresholds[0])} ~ 0（浅蓝）`;
+      lab.textContent=mode==="relative"?`- ${absThresholds[0].toFixed(1)}% ~ 0%（浅蓝）`:`- ${fmtAbsVal(absThresholds[0])} ~ 0（浅蓝）`;
     }else if(i===5){
-      lab.textContent=mode==="relative"?`0% ~ +${absThresholds[0].toFixed(1)}%（浅红）`:`0 ~ +${fmt(absThresholds[0])}（浅红）`;
+      lab.textContent=mode==="relative"?`0% ~ +${absThresholds[0].toFixed(1)}%（浅红）`:`0 ~ +${fmtAbsVal(absThresholds[0])}（浅红）`;
     }else if(i===9){
-      lab.textContent=mode==="relative"?`> +${absThresholds[4].toFixed(1)}%`:`> +${fmt(absThresholds[4])} ${METRIC_UNIT[metric]||""}`;
+      lab.textContent=mode==="relative"?`> +${absThresholds[4].toFixed(1)}%`:`> +${fmtAbsVal(absThresholds[4])} ${absUnit}`;
     }else{
       if(i<=4){
         const lo=i===1?absThresholds[3]:i===2?absThresholds[2]:i===3?absThresholds[1]:absThresholds[0];
         const hi=i===1?absThresholds[4]:i===2?absThresholds[3]:i===3?absThresholds[2]:absThresholds[1];
         lab.textContent=mode==="relative"
           ?`-${hi.toFixed(1)}% ~ -${lo.toFixed(1)}%`
-          :`-${fmt(hi)} ~ -${fmt(lo)} ${METRIC_UNIT[metric]||""}`;
+          :`-${fmtAbsVal(hi)} ~ -${fmtAbsVal(lo)} ${absUnit}`;
       }else{
         const lo=i===6?absThresholds[0]:i===7?absThresholds[1]:i===8?absThresholds[2]:absThresholds[3];
         const hi=i===6?absThresholds[1]:i===7?absThresholds[2]:i===8?absThresholds[3]:absThresholds[4];
         lab.textContent=mode==="relative"
           ?`+${lo.toFixed(1)}% ~ +${hi.toFixed(1)}%`
-          :`+${fmt(lo)} ~ +${fmt(hi)} ${METRIC_UNIT[metric]||""}`;
+          :`+${fmtAbsVal(lo)} ~ +${fmtAbsVal(hi)} ${absUnit}`;
       }
     }
     box.appendChild(sw);
@@ -289,16 +293,17 @@ function renderDiffComparison(){
     return true;
   }
   const isSD=metric==="供需";
-  let globalRatio;
+  let globalRatio,totalMainAll=0,totalCompAll=0;
   if(isSD){
     const tmi=cells.reduce((s,c)=>s+((mainAgg.get(c)?.imp)||0),0),tmo=cells.reduce((s,c)=>s+((mainAgg.get(c)?.ord)||0),0);
     const tci=cells.reduce((s,c)=>s+((compareAgg.get(c)?.imp)||0),0),tco=cells.reduce((s,c)=>s+((compareAgg.get(c)?.ord)||0),0);
     const gcrM=tmi>0?tmo/tmi:0,gcrC=tci>0?tco/tci:0;
     globalRatio=gcrM>0?gcrC/gcrM:1;
   }else{
-    const totalBase=cells.reduce((s,cell)=>s+((mainAgg.get(cell)?.[metricField])||0),0);
-    const totalComp=cells.reduce((s,cell)=>s+((compareAgg.get(cell)?.[metricField])||0),0);
-    globalRatio=totalBase>0?(totalComp/totalBase):1;
+    // 用全城所有格子的总量（而非过滤后的格子），以便正确计算份额
+    totalMainAll=[...mainAgg.values()].reduce((s,v)=>s+(v[metricField]||0),0);
+    totalCompAll=[...compareAgg.values()].reduce((s,v)=>s+(v[metricField]||0),0);
+    globalRatio=totalMainAll>0?(totalCompAll/totalMainAll):1;
   }
   const tmp=[];
   cells.forEach((cell)=>{
@@ -312,9 +317,11 @@ function renderDiffComparison(){
         :((crC-crM)*10000);
     }else{
       const base=a[metricField]||0,comp=b[metricField]||0;
+      const mShare=totalMainAll>0?base/totalMainAll:0;
+      const cShare=totalCompAll>0?comp/totalCompAll:0;
       delta=diffMode==="relative"
-        ?(base>0?((comp-base*globalRatio)/(base*globalRatio)*100):(comp>0?100:0))
-        :(comp-base);
+        ?(mShare>0?((cShare-mShare)/mShare*100):(cShare>0?100:0))
+        :((cShare-mShare)*100);  // 单位：百分点(pp)
     }
     tmp.push({cell,a,b,delta});
   });
@@ -326,7 +333,7 @@ function renderDiffComparison(){
       type:"Feature",
       properties:{
         h3:cell,metric:`对比-${metric}`,diffMode,bin,value:d,
-        preVal:isSD?(a.imp>0?a.ord/a.imp:0):(a[metricField]||0),postVal:isSD?(b.imp>0?b.ord/b.imp:0):(b[metricField]||0),
+        preVal:isSD?(a.imp>0?a.ord/a.imp:0):(totalMainAll>0?(a[metricField]||0)/totalMainAll:0),postVal:isSD?(b.imp>0?b.ord/b.imp:0):(totalCompAll>0?(b[metricField]||0)/totalCompAll:0),
         preImp:a.imp||0,postImp:b.imp||0,preCount:a.count||0,postCount:b.count||0,
         mainIndices:JSON.stringify(a.indices||[]),compareIndices:JSON.stringify(b.indices||[])
       },
@@ -416,7 +423,8 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
   const diffMode=diffProps.diffMode||"relative";
   const diffVal=Number(diffProps.value);
   const sign=diffVal>0?"+":"";
-  const diffLabel=Number.isFinite(diffVal)?(diffMode==="relative"?`${sign}${diffVal.toFixed(1)}%`:`${sign}${Math.round(diffVal).toLocaleString()} ${METRIC_UNIT[metric]||""}`):"-";
+  const _isSdModal=metric==="供需";
+  const diffLabel=Number.isFinite(diffVal)?(diffMode==="relative"?`${sign}${diffVal.toFixed(1)}%`:(_isSdModal?`${sign}${diffVal.toFixed(1)} 万分点`:`${sign}${diffVal.toFixed(4)} pp`)):"-";
   const color=diffVal>0?"#dc2626":diffVal<0?"#1d4ed8":"#6b7280";
   el("hotelModalTitle").textContent=`对比区块 · ${metric}`;
   let activeTab=mainHotels.length>0?"main":"compare";
@@ -551,12 +559,13 @@ function updateHeatLayer(geojson,palette,binCount){
           const delta=Number(p.value);
           const sign=delta>0?"+":"";
           const _isSdM=m==="供需";
-          const deltaText=!Number.isFinite(delta)?"—":(isRel?`${sign}${delta.toFixed(2)}%`:(_isSdM?`${sign}${delta.toFixed(1)} 万分点`:`${sign}${Math.round(delta).toLocaleString()} ${METRIC_UNIT[m]||""}`));
+          const deltaText=!Number.isFinite(delta)?"—":(isRel?`${sign}${delta.toFixed(2)}%`:(_isSdM?`${sign}${delta.toFixed(1)} 万分点`:`${sign}${delta.toFixed(4)} pp`));
           const color=delta>10?"#dc2626":delta<-10?"#1d4ed8":"#6b7280";
           const fmtCR=(v)=>(Number(v)*100).toFixed(3)+"%";
-          const preStr=_isSdM?fmtCR(p.preVal):`${Math.round(p.preVal).toLocaleString()} ${METRIC_UNIT[m]||""}`;
-          const postStr=_isSdM?fmtCR(p.postVal):`${Math.round(p.postVal).toLocaleString()} ${METRIC_UNIT[m]||""}`;
-          html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${color};">${p.metric}：${deltaText}</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>${_isSdM?"主CR":"主数据"}：${preStr}</span><span>${_isSdM?"对比CR":"对比数据"}：${postStr}</span><span>主曝光：${Math.round(p.preImp).toLocaleString()}</span><span>对比曝光：${Math.round(p.postImp).toLocaleString()}</span><span>主酒店数：${p.preCount} 家</span><span>对比酒店数：${p.postCount} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
+          const fmtShare=(v)=>`${(Number(v)*100).toFixed(4)}%`;
+          const preStr=_isSdM?fmtCR(p.preVal):fmtShare(p.preVal);
+          const postStr=_isSdM?fmtCR(p.postVal):fmtShare(p.postVal);
+          html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${color};">${p.metric}：${deltaText}</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>${_isSdM?"主CR":"主占比"}：${preStr}</span><span>${_isSdM?"对比CR":"对比占比"}：${postStr}</span><span>主曝光：${Math.round(p.preImp).toLocaleString()}</span><span>对比曝光：${Math.round(p.postImp).toLocaleString()}</span><span>主酒店数：${p.preCount} 家</span><span>对比酒店数：${p.postCount} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
         }else if(p.metric===SD||p.metric===SDGMV||p.metric===SDCLK){
           const isG=p.metric===SDGMV,isCLK=p.metric===SDCLK,score=p.value,isLD=p.bin===10;
           const label=isLD?"数据不足":score>0.1?"欠曝":score<-0.1?"过曝":"均衡";
