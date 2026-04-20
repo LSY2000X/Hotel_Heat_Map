@@ -484,20 +484,20 @@ function showUnderexposedModal(){
   const diffMode=el("evtDiffModeSelect").value;
   const isSD=metric==="供需";
   const deltaUnit=diffMode==="relative"?"%":"pp";
-  const blueCells=lastDiffTmp.filter(x=>x.delta<0);
-  if(!blueCells.length){_showEvtMsg("当前对比数据中没有欠曝光格子（份额下降）。");return;}
-  // 按 delta 升序（最差的格子先遍历），保证酒店拿到的是最差格子的 delta
-  blueCells.sort((a,b)=>a.delta-b.delta);
+  const underexpCells=lastDiffTmp.filter(x=>x.delta>0);
+  if(!underexpCells.length){_showEvtMsg("当前对比数据中没有欠曝光格子（份额上升）。");return;}
+  // 按 delta 降序（欠曝最严重的格子先遍历），保证酒店拿到的是最差格子的 delta
+  underexpCells.sort((a,b)=>b.delta-a.delta);
   // 收集酒店（去重）
   const seen=new Set();
   const hotels=[];
-  blueCells.forEach(({a,delta})=>{
+  underexpCells.forEach(({a,delta})=>{
     (a.indices||[]).forEach(i=>{
       if(!seen.has(i)){seen.add(i);const h=mainRows[i];if(h)hotels.push({...h,_cellDelta:delta});}
     });
   });
-  // 按格子变化幅度升序（最严重的在前）
-  hotels.sort((a,b)=>a._cellDelta-b._cellDelta);
+  // 按格子变化幅度降序（欠曝最严重在前）
+  hotels.sort((a,b)=>b._cellDelta-a._cellDelta);
   // 生成 CSV
   function pct2(v){return v==null?"":(v*100).toFixed(2)+"%";}
   const header=["酒店ID","酒店名称","曝光","点击","订单","CTR","CR","星级","挂牌","总订单额",`格子变化(${deltaUnit})`];
