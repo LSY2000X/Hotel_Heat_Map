@@ -330,7 +330,6 @@ function renderDiffComparison(){
     tmp.push({cell,a,b,delta});
   });
   lastDiffTmp=tmp;
-  const uBtn=el("evtUnderexpBtn");if(uBtn)uBtn.disabled=!tmp.length;
   const absThresholds=_buildAbsThresholdsForMode(tmp.map(x=>x.delta),diffMode);
   const features=tmp.map(({cell,a,b,delta})=>{
     const d=Number.isFinite(delta)?delta:0;
