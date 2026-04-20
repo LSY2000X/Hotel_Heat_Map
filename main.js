@@ -511,7 +511,7 @@ function showUnderexposedModal(){
   const metric=el("evtDiffMetricSelect").value;
   const diffMode=el("evtDiffModeSelect").value;
   const isSD=metric==="供需";
-  const deltaUnit=isSD?"万分点":(diffMode==="relative"?"%":"pp");
+  const deltaUnit=diffMode==="relative"?"%":"pp";
   const COLS=[
     {label:"#",key:null},
     {label:"ID",key:h=>h.id},
@@ -546,7 +546,9 @@ function showUnderexposedModal(){
     data.forEach((h,idx)=>{
       const ctr=h[IMP]>0?h[CLK]/h[IMP]:null,cr=h[IMP]>0?h[ORD]/h[IMP]:null;
       const dSign=h._cellDelta>0?"+":" ";
-      const dStr=Number.isFinite(h._cellDelta)?`${dSign}${h._cellDelta.toFixed(isSD?1:4)}`:"—";
+      // 供需绝对值 delta 单位是万分点，除以100转为 pp；其余直接用
+      const dVal=(isSD&&diffMode==="absolute")?h._cellDelta/100:h._cellDelta;
+      const dStr=Number.isFinite(dVal)?`${dSign}${dVal.toFixed(2)}${deltaUnit}`:"—";
       const tr=document.createElement("tr");
       tr.innerHTML=`<td style="color:rgba(0,0,0,0.35)">${idx+1}</td><td title="${h.id}" style="font-size:11px;color:rgba(0,0,0,0.45)">${h.id}</td><td title="${h.name||'—'}">${h.name||"—"}</td><td>${Math.round(h[IMP]).toLocaleString()}</td><td>${Math.round(h[CLK]).toLocaleString()}</td><td>${Math.round(h[ORD]).toLocaleString()}</td><td>${pct(ctr)}</td><td>${pct(cr)}</td><td>${h[STAR]}</td><td>${h[LIST]}</td><td>${h[GMV]?"¥"+Math.round(h[GMV]).toLocaleString():"—"}</td><td style="color:#1d4ed8;font-weight:600;">${dStr}</td>`;
       tbody.appendChild(tr);
