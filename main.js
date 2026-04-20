@@ -472,6 +472,11 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
   renderSummary();renderHead();renderRows();
   el("hotelModal").classList.remove("hidden");
 }
+function _haversineKm(lon1,lat1,lon2,lat2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.asin(Math.sqrt(a));
+}
 function _showEvtMsg(msg){
   const el2=el("evtInfo");if(!el2)return;
   el2.textContent=msg;el2.classList.remove("hidden");
@@ -529,10 +534,18 @@ function showUnderexposedModal(){
   if(!hotels.length){_showEvtMsg("当前没有欠曝光酒店（主数据曝光份额低于对比数据）。");return;}
   // 按 delta 降序（欠曝最严重在前）
   hotels.sort((a,b)=>b._hotelDelta-a._hotelDelta);
+  // 5km 过滤
+  const nearbyOnly=el("evtUnderexpNearby")?.checked;
+  let filtered=hotels;
+  if(nearbyOnly){
+    if(_eventJumpStarLon==null||_eventJumpStarLat==null){_showEvtMsg("请先设置活动跳转点，再勾选 5km 过滤。");return;}
+    filtered=hotels.filter(h=>h.lon!=null&&h.lat!=null&&_haversineKm(h.lon,h.lat,_eventJumpStarLon,_eventJumpStarLat)<=5);
+    if(!filtered.length){_showEvtMsg("活动点 5km 内没有欠曝光酒店。");return;}
+  }
   // 生成 CSV
   function pct2(v){return v==null?"":(v*100).toFixed(2)+"%";}
   const header=["酒店ID","酒店名称","曝光","点击","订单","CTR","CR","星级","挂牌","总订单额",`酒店维度变化(${deltaUnit})`];
-  const rows=hotels.map(h=>{
+  const rows=filtered.map(h=>{
     const ctr=h[IMP]>0?h[CLK]/h[IMP]:null;
     const cr=h[IMP]>0?h[ORD]/h[IMP]:null;
     const dVal=(isSD&&diffMode==="absolute")?h._hotelDelta/100:h._hotelDelta;
@@ -550,7 +563,7 @@ function showUnderexposedModal(){
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download=`欠曝光酒店_酒店维度_${hotels.length}家.csv`;
+  a.href=url;a.download=`欠曝光酒店_${nearbyOnly?"5km内_":""}酒店维度_${filtered.length}家.csv`;
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
 }
