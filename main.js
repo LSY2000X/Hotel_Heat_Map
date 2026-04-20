@@ -474,10 +474,7 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
   el("hotelModal").classList.remove("hidden");
 }
 function showUnderexposedModal(){
-  if((!lastDiffTmp||!lastDiffTmp.length)&&mainRows?.length&&compareRows?.length){
-    renderDiffComparison();
-  }
-  if(!lastDiffTmp||!lastDiffTmp.length){alert("请先上传主数据和对比数据。");return;}
+  if(!lastDiffTmp||!lastDiffTmp.length)return;
   const blueCells=lastDiffTmp.filter(x=>x.delta<0);
   if(!blueCells.length){alert("当前对比数据中没有欠曝光格子（delta < 0）。");return;}
   const seen=new Set();
@@ -1629,11 +1626,10 @@ async function _handleEvtHotelFile(file){
     el("evtHotelLabel").classList.add("evt-file-loaded");
     el("evtUserLabel").classList.remove("evt-file-loaded");
     el("evtUserLabelText").textContent="② 用户维度表（UID·入住·离店·酒店ID·经纬度·点击·预订·商旅）";
-    el(“evtInfo”).textContent=skipped>0?`对比数据已加载：${valid.length} 家（跳过 ${skipped} 行）。可勾选”显示对比数据”查看。`:`对比数据已加载：${dataRows.length} 家。可勾选”显示对比数据”查看。`;
-    el(“evtInfo”).classList.remove(“hidden”);
-    const uBtn=el(“evtUnderexpBtn”);if(uBtn)uBtn.disabled=false;
-    if(evtViewMode===”compare”||evtViewMode===”diff”)setEvtViewMode(evtViewMode);
-    else setEvtViewMode(“main”);
+    el("evtInfo").textContent=skipped>0?`对比数据已加载：${valid.length} 家（跳过 ${skipped} 行）。可勾选“显示对比数据”查看。`:`对比数据已加载：${dataRows.length} 家。可勾选“显示对比数据”查看。`;
+    el("evtInfo").classList.remove("hidden");
+    if(evtViewMode==="compare"||evtViewMode==="diff")setEvtViewMode(evtViewMode);
+    else setEvtViewMode("main");
   }catch(err){el("evtError").textContent=err?.message??String(err);el("evtError").classList.remove("hidden");}
   finally{showLoading(false);}
 }
@@ -1668,7 +1664,7 @@ el("evtViewCompareChk").addEventListener("change",(e)=>{if(e.target.checked)setE
 el("evtViewDiffChk").addEventListener("change",(e)=>{if(e.target.checked)setEvtViewMode("diff");else if(evtViewMode==="diff")setEvtViewMode("main");});
 el("evtDiffMetricSelect").addEventListener("change",()=>{if(evtViewMode==="diff")renderDiffComparison();});
 el("evtDiffModeSelect").addEventListener("change",()=>{if(evtViewMode==="diff")renderDiffComparison();});
-el("evtUnderexpBtn")?.addEventListener("click",showUnderexposedModal);
+el("evtUnderexpBtn").addEventListener("click",showUnderexposedModal);
 el("evtApplyBtn").addEventListener("click",_applyEvtFilters);
 el("evtCircle5Chk").addEventListener("change",updateEventCircleLayers);
 el("evtCircle9Chk").addEventListener("change",updateEventCircleLayers);
