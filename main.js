@@ -496,12 +496,13 @@ function showUnderexposedModal(){
   let globalRatio=1,totalMainAll=0,totalCompAll=0;
   const METRIC_F={曝光:IMP,点击:CLK,订单:ORD};
   const mf=METRIC_F[metric]||IMP;
+  // 对比期全城曝光/订单总量（用于判断对比期自身是否欠曝）
+  const totalCompImp=compareRows.reduce((s,r)=>s+(r[IMP]||0),0);
+  const totalCompOrd=compareRows.reduce((s,r)=>s+(r[ORD]||0),0);
   if(isSD){
     const tmi=mainRows.reduce((s,r)=>s+(r[IMP]||0),0);
     const tmo=mainRows.reduce((s,r)=>s+(r[ORD]||0),0);
-    const tci=compareRows.reduce((s,r)=>s+(r[IMP]||0),0);
-    const tco=compareRows.reduce((s,r)=>s+(r[ORD]||0),0);
-    const gcrM=tmi>0?tmo/tmi:0,gcrC=tci>0?tco/tci:0;
+    const gcrM=tmi>0?tmo/tmi:0,gcrC=totalCompImp>0?totalCompOrd/totalCompImp:0;
     globalRatio=gcrM>0?gcrC/gcrM:1;
   }else{
     totalMainAll=mainRows.reduce((s,r)=>s+(r[mf]||0),0);
@@ -529,22 +530,30 @@ function showUnderexposedModal(){
         ?(mShare>0?((cShare-mShare)/mShare*100):(cShare>0?100:0))
         :(cShare-mShare)*100;
     }
-    if(Number.isFinite(delta)&&delta>0)hotels.push({...h,_hotelDelta:delta});
+    // 对比期该酒店曝光占比 vs 订单占比
+    const cImpShare=totalCompImp>0?(c[IMP]||0)/totalCompImp:0;
+    const cOrdShare=totalCompOrd>0?(c[ORD]||0)/totalCompOrd:0;
+    if(Number.isFinite(delta)&&delta>0)
+      hotels.push({...h,_hotelDelta:delta,_c:c,_cImpShare:cImpShare,_cOrdShare:cOrdShare});
   });
   if(!hotels.length){_showEvtMsg("当前没有欠曝光酒店（主数据曝光份额低于对比数据）。");return;}
   // 按 delta 降序（欠曝最严重在前）
   hotels.sort((a,b)=>b._hotelDelta-a._hotelDelta);
+  // 对比期仍欠曝过滤：曝光占比 <= 订单占比（需求还有余量）
+  const stillUnderexp=hotels.filter(h=>h._cImpShare<=h._cOrdShare);
+  if(!stillUnderexp.length){_showEvtMsg("没有酒店同时满足：流量暴涨 且 对比期仍供不应求。");return;}
   // 5km 过滤
   const nearbyOnly=el("evtUnderexpNearby")?.checked;
-  let filtered=hotels;
+  let filtered=stillUnderexp;
   if(nearbyOnly){
     if(_eventJumpStarLon==null||_eventJumpStarLat==null){_showEvtMsg("请先设置活动跳转点，再勾选 5km 过滤。");return;}
-    filtered=hotels.filter(h=>h.lon!=null&&h.lat!=null&&_haversineKm(h.lon,h.lat,_eventJumpStarLon,_eventJumpStarLat)<=5);
-    if(!filtered.length){_showEvtMsg("活动点 5km 内没有欠曝光酒店。");return;}
+    filtered=stillUnderexp.filter(h=>h.lon!=null&&h.lat!=null&&_haversineKm(h.lon,h.lat,_eventJumpStarLon,_eventJumpStarLat)<=5);
+    if(!filtered.length){_showEvtMsg("活动点 5km 内没有符合条件的酒店。");return;}
   }
   // 生成 CSV
   function pct2(v){return v==null?"":(v*100).toFixed(2)+"%";}
-  const header=["酒店ID","酒店名称","曝光","点击","订单","CTR","CR","星级","挂牌","总订单额",`酒店维度变化(${deltaUnit})`];
+  function pct4(v){return v==null?"":(v*100).toFixed(4)+"%";}
+  const header=["酒店ID","酒店名称","曝光","点击","订单","CTR","CR","星级","挂牌","总订单额",`流量变化(${deltaUnit})`,`对比期曝光占比`,`对比期订单占比`];
   const rows=filtered.map(h=>{
     const ctr=h[IMP]>0?h[CLK]/h[IMP]:null;
     const cr=h[IMP]>0?h[ORD]/h[IMP]:null;
@@ -556,7 +565,8 @@ function showUnderexposedModal(){
       pct2(ctr), pct2(cr),
       h[STAR], h[LIST],
       h[GMV]?Math.round(h[GMV]):"",
-      dStr
+      dStr,
+      pct4(h._cImpShare), pct4(h._cOrdShare)
     ].map(v=>String(v??'').includes(',')?`"${v}"`:v).join(',');
   });
   const csv='\uFEFF'+[header.join(','),...rows].join('\n');
