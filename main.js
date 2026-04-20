@@ -473,17 +473,20 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
   renderSummary();renderHead();renderRows();
   el("hotelModal").classList.remove("hidden");
 }
+function _showEvtMsg(msg){
+  const el2=el("evtInfo");if(!el2)return;
+  el2.textContent=msg;el2.classList.remove("hidden");
+  clearTimeout(el2._t);el2._t=setTimeout(()=>el2.classList.add("hidden"),4000);
+}
 function showUnderexposedModal(){
-  if(!mainRows?.length||!compareRows?.length){alert("请先上传主数据和对比数据。");return;}
-  // 若还没跑过 diff，先计算
-  if(!lastDiffTmp||!lastDiffTmp.length){renderDiffComparison();}
-  if(!lastDiffTmp||!lastDiffTmp.length){alert("对比视图无满足门槛的格子，无法生成列表。");return;}
+  if(!mainRows?.length||!compareRows?.length){_showEvtMsg("请先上传主数据和对比数据。");return;}
+  if(!lastDiffTmp||!lastDiffTmp.length){_showEvtMsg("请先切换到「对比差值」视图，再点击下载。");return;}
   const metric=el("evtDiffMetricSelect").value;
   const diffMode=el("evtDiffModeSelect").value;
   const isSD=metric==="供需";
   const deltaUnit=diffMode==="relative"?"%":"pp";
   const blueCells=lastDiffTmp.filter(x=>x.delta<0);
-  if(!blueCells.length){alert("当前对比数据中没有欠曝光格子（份额下降）。");return;}
+  if(!blueCells.length){_showEvtMsg("当前对比数据中没有欠曝光格子（份额下降）。");return;}
   // 收集酒店（去重）
   const seen=new Set();
   const hotels=[];
