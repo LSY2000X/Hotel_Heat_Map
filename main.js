@@ -519,7 +519,7 @@ function showUnderexposedModal(){
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download=`欠曝光酒店_${blueCells.length}格子_${hotels.length}家.csv`;
+  a.href=url;a.download=`欠曝光酒店_${underexpCells.length}格子_${hotels.length}家.csv`;
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
 }
