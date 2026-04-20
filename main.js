@@ -43,6 +43,8 @@ const AVG_METRICS=new Set(["星级","挂牌","极好酒店","极差酒店"]);
 const PALETTE_STOPS=["#ddeeff","#b3d4ff","#80b4ff","#4d8ffa","#2563eb","#1d4bbf","#f97316","#c2410c"];
 const STAR_COLORS={0:"#d1d5db",1:"#d1d5db",2:"#d1d5db",3:"#fca5a5",4:"#ef4444",5:"#991b1b"};
 const LIST_COLORS={0:"#d1d5db",5:"#fca5a5",6:"#991b1b"};
+const TS_HEAT_SRC='ts-heat-src',TS_HEAT_LYR='ts-heat-lyr';
+const TS_SD_SRC='ts-sd-src',TS_SD_FILL='ts-sd-fill',TS_SD_LINE='ts-sd-line';
 const SUPPLY_DEMAND_PALETTE=["#1e3a8a","#1d4ed8","#3b82f6","#93c5fd","#22c55e","#22c55e","#fca5a5","#f87171","#ef4444","#991b1b","#d1d5db"];
 function buildPaletteFrom(stops,n){if(n<=1)return[stops[0]];return Array.from({length:n},(_,i)=>{const t=i/(n-1),pos=t*(stops.length-1),lo=Math.floor(pos),hi=Math.min(lo+1,stops.length-1);return lerpColor(stops[lo],stops[hi],pos-lo);});}
 function buildPalette(n){return buildPaletteFrom(PALETTE_STOPS,n);}
@@ -94,6 +96,7 @@ let mainRows=null,mainTotalRows=0;
 let compareRows=null,compareTotalRows=0,compareFileName="";
 let activeDatasetType="main";
 let evtViewMode="main"; // main | compare | diff
+let lastDiffTmp=null;
 function _applyDataset(rows,totalRows,type){
   cachedRows=rows;
   cachedTotalRows=totalRows;
@@ -326,6 +329,8 @@ function renderDiffComparison(){
     }
     tmp.push({cell,a,b,delta});
   });
+  lastDiffTmp=tmp;
+  const uBtn=el("evtUnderexpBtn");if(uBtn)uBtn.disabled=!tmp.length;
   const absThresholds=_buildAbsThresholdsForMode(tmp.map(x=>x.delta),diffMode);
   const features=tmp.map(({cell,a,b,delta})=>{
     const d=Number.isFinite(delta)?delta:0;
@@ -466,6 +471,87 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
     });
   }
   renderSummary();renderHead();renderRows();
+  el("hotelModal").classList.remove("hidden");
+}
+function showUnderexposedModal(){
+  if(!lastDiffTmp||!lastDiffTmp.length)return;
+  const blueCells=lastDiffTmp.filter(x=>x.delta<0);
+  if(!blueCells.length){alert("当前对比数据中没有欠曝光格子（delta < 0）。");return;}
+  const seen=new Set();
+  const hotels=[];
+  blueCells.forEach(({a,delta})=>{
+    (a.indices||[]).forEach(i=>{
+      if(!seen.has(i)){seen.add(i);const h=mainRows[i];if(h)hotels.push({...h,_cellDelta:delta});}
+    });
+  });
+  const aiBtn=el("hotelModalAIBtn");
+  if(aiBtn){aiBtn.classList.add("hidden");aiBtn.onclick=null;}
+  el("hotelModalTitle").textContent=`欠曝光酒店 · ${blueCells.length} 个格子 · ${hotels.length} 家（主数据）`;
+  const cityImp=mainRows.reduce((s,r)=>s+r[IMP],0);
+  const cityCTR=cityImp>0?mainRows.reduce((s,r)=>s+r[CLK],0)/cityImp:null;
+  const cityCR=cityImp>0?mainRows.reduce((s,r)=>s+r[ORD],0)/cityImp:null;
+  const blkImp=hotels.reduce((s,h)=>s+h[IMP],0);
+  const blkClk=hotels.reduce((s,h)=>s+h[CLK],0);
+  const blkOrd=hotels.reduce((s,h)=>s+h[ORD],0);
+  const blkGmv=hotels.reduce((s,h)=>s+(h[GMV]??0),0);
+  const blkCTR=blkImp>0?blkClk/blkImp:null;
+  const blkCR=blkImp>0?blkOrd/blkImp:null;
+  function pct(v){return v==null?"—":(v*100).toFixed(2)+"%";}
+  function pctDiff(a,b){if(a==null||b==null||b===0)return"—";return((a-b)/b*100).toFixed(1)+"%";}
+  const sm=el("hotelModalSummary");
+  sm.style.cssText="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:12px 16px 0;";
+  sm.innerHTML=[
+    ["涉及",`${hotels.length} 家`,`${blueCells.length} 个格子`,"#6b7280"],
+    ["合计曝光",Math.round(blkImp).toLocaleString(),"主数据","#007aff"],
+    ["CTR vs全城",pct(blkCTR),`全城 ${pct(cityCTR)}，差 ${pctDiff(blkCTR,cityCTR)}`,blkCTR!=null&&cityCTR!=null&&blkCTR<cityCTR?"#dc2626":"#16a34a"],
+    ["CR vs全城",pct(blkCR),`全城 ${pct(cityCR)}，差 ${pctDiff(blkCR,cityCR)}`,blkCR!=null&&cityCR!=null&&blkCR<cityCR?"#dc2626":"#16a34a"],
+    ["合计订单额",blkGmv?"¥"+Math.round(blkGmv).toLocaleString():"—","主数据","#6b7280"]
+  ].map(([label,val,sub,color])=>`<div style="background:rgba(0,0,0,0.03);border:1px solid rgba(0,0,0,0.07);border-radius:10px;padding:8px 10px;"><div style="font-size:10.5px;color:rgba(0,0,0,0.45);margin-bottom:4px;">${label}</div><div style="font-size:13px;font-weight:700;color:${color};">${val}</div><div style="font-size:10.5px;color:rgba(0,0,0,0.4);margin-top:2px;">${sub}</div></div>`).join("");
+  const metric=el("evtDiffMetricSelect").value;
+  const diffMode=el("evtDiffModeSelect").value;
+  const isSD=metric==="供需";
+  const deltaUnit=isSD?"万分点":(diffMode==="relative"?"%":"pp");
+  const COLS=[
+    {label:"#",key:null},
+    {label:"ID",key:h=>h.id},
+    {label:"酒店名称",key:h=>h.name||""},
+    {label:"曝光",key:h=>h[IMP],numeric:true},
+    {label:"点击",key:h=>h[CLK],numeric:true},
+    {label:"订单",key:h=>h[ORD],numeric:true},
+    {label:"CTR",key:h=>h[IMP]>0?h[CLK]/h[IMP]:0,numeric:true},
+    {label:"CR",key:h=>h[IMP]>0?h[ORD]/h[IMP]:0,numeric:true},
+    {label:"星级",key:h=>h[STAR],numeric:true},
+    {label:"挂牌",key:h=>h[LIST],numeric:true},
+    {label:"总订单额",key:h=>h[GMV]??0,numeric:true},
+    {label:`格子变化(${deltaUnit})`,key:h=>h._cellDelta,numeric:true}
+  ];
+  let sortColIdx=3,sortDir=-1;
+  function renderHead(){
+    const tr=el("hotelModalHead").querySelector("tr");tr.innerHTML="";
+    COLS.forEach((col,ci)=>{
+      const th=document.createElement("th");
+      if(col.key){
+        th.className="sortable"+(ci===sortColIdx?(sortDir===-1?" sort-desc":" sort-asc"):"");
+        th.innerHTML=`${col.label}<span class="sort-icon">${ci===sortColIdx?(sortDir===-1?"↓":"↑"):"↕"}</span>`;
+        th.addEventListener("click",()=>{if(sortColIdx===ci)sortDir*=-1;else{sortColIdx=ci;sortDir=(col.label==="ID"||col.label==="酒店名称")?1:-1;}renderHead();renderRows();});
+      }else{th.textContent=col.label;}
+      tr.appendChild(th);
+    });
+  }
+  function renderRows(){
+    const col=COLS[sortColIdx];
+    const data=[...hotels].sort((a,b)=>{const va=col.key(a),vb=col.key(b);if(typeof va==="string")return sortDir*va.localeCompare(vb,"zh");return sortDir*(vb-va)*-1;});
+    const tbody=el("hotelModalBody");tbody.innerHTML="";
+    data.forEach((h,idx)=>{
+      const ctr=h[IMP]>0?h[CLK]/h[IMP]:null,cr=h[IMP]>0?h[ORD]/h[IMP]:null;
+      const dSign=h._cellDelta>0?"+":" ";
+      const dStr=Number.isFinite(h._cellDelta)?`${dSign}${h._cellDelta.toFixed(isSD?1:4)}`:"—";
+      const tr=document.createElement("tr");
+      tr.innerHTML=`<td style="color:rgba(0,0,0,0.35)">${idx+1}</td><td title="${h.id}" style="font-size:11px;color:rgba(0,0,0,0.45)">${h.id}</td><td title="${h.name||'—'}">${h.name||"—"}</td><td>${Math.round(h[IMP]).toLocaleString()}</td><td>${Math.round(h[CLK]).toLocaleString()}</td><td>${Math.round(h[ORD]).toLocaleString()}</td><td>${pct(ctr)}</td><td>${pct(cr)}</td><td>${h[STAR]}</td><td>${h[LIST]}</td><td>${h[GMV]?"¥"+Math.round(h[GMV]).toLocaleString():"—"}</td><td style="color:#1d4ed8;font-weight:600;">${dStr}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+  renderHead();renderRows();
   el("hotelModal").classList.remove("hidden");
 }
 function renderDiscreteLegend(metric){
@@ -1578,6 +1664,7 @@ el("evtViewCompareChk").addEventListener("change",(e)=>{if(e.target.checked)setE
 el("evtViewDiffChk").addEventListener("change",(e)=>{if(e.target.checked)setEvtViewMode("diff");else if(evtViewMode==="diff")setEvtViewMode("main");});
 el("evtDiffMetricSelect").addEventListener("change",()=>{if(evtViewMode==="diff")renderDiffComparison();});
 el("evtDiffModeSelect").addEventListener("change",()=>{if(evtViewMode==="diff")renderDiffComparison();});
+el("evtUnderexpBtn").addEventListener("click",showUnderexposedModal);
 el("evtApplyBtn").addEventListener("click",_applyEvtFilters);
 el("evtCircle5Chk").addEventListener("change",updateEventCircleLayers);
 el("evtCircle9Chk").addEventListener("change",updateEventCircleLayers);
@@ -1615,8 +1702,6 @@ el("applyMapBtn").addEventListener("click",()=>{
 // ============================================================
 // 4 · 动态热力图（时序模式）
 // ============================================================
-const TS_HEAT_SRC='ts-heat-src',TS_HEAT_LYR='ts-heat-lyr';
-const TS_SD_SRC='ts-sd-src',TS_SD_FILL='ts-sd-fill',TS_SD_LINE='ts-sd-line';
 let tsWeekMap=null,tsWeeks=[],tsCurrentIdx=0;
 let tsPlaying=false,tsTimer=null,tsSpeed=1;
 let _tsBound=false;
