@@ -474,7 +474,7 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
   el("hotelModal").classList.remove("hidden");
 }
 function showUnderexposedModal(){
-  if(!lastDiffTmp||!lastDiffTmp.length)return;
+  if(!lastDiffTmp||!lastDiffTmp.length){alert("请先切换到「显示两组数据对比情况」视图，再点击此按钮。");return;}
   const blueCells=lastDiffTmp.filter(x=>x.delta<0);
   if(!blueCells.length){alert("当前对比数据中没有欠曝光格子（delta < 0）。");return;}
   const seen=new Set();
@@ -1664,7 +1664,7 @@ el("evtViewCompareChk").addEventListener("change",(e)=>{if(e.target.checked)setE
 el("evtViewDiffChk").addEventListener("change",(e)=>{if(e.target.checked)setEvtViewMode("diff");else if(evtViewMode==="diff")setEvtViewMode("main");});
 el("evtDiffMetricSelect").addEventListener("change",()=>{if(evtViewMode==="diff")renderDiffComparison();});
 el("evtDiffModeSelect").addEventListener("change",()=>{if(evtViewMode==="diff")renderDiffComparison();});
-el("evtUnderexpBtn").addEventListener("click",showUnderexposedModal);
+el("evtUnderexpBtn")?.addEventListener("click",showUnderexposedModal);
 el("evtApplyBtn").addEventListener("click",_applyEvtFilters);
 el("evtCircle5Chk").addEventListener("change",updateEventCircleLayers);
 el("evtCircle9Chk").addEventListener("change",updateEventCircleLayers);
