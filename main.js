@@ -474,7 +474,8 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
   el("hotelModal").classList.remove("hidden");
 }
 function showUnderexposedModal(){
-  if(!lastDiffTmp||!lastDiffTmp.length){alert("请先切换到「显示两组数据对比情况」视图，再点击此按钮。");return;}
+  if(!mainRows?.length||!compareRows?.length){alert("请先上传主数据和对比数据。");return;}
+  if(!lastDiffTmp||!lastDiffTmp.length){alert("请先勾选「显示两组数据对比情况」生成对比视图，再点击此按钮。");return;}
   const blueCells=lastDiffTmp.filter(x=>x.delta<0);
   if(!blueCells.length){alert("当前对比数据中没有欠曝光格子（delta < 0）。");return;}
   const seen=new Set();
