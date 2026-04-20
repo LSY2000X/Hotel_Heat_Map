@@ -479,32 +479,63 @@ function _showEvtMsg(msg){
 }
 function showUnderexposedModal(){
   if(!mainRows?.length||!compareRows?.length){_showEvtMsg("请先上传主数据和对比数据。");return;}
-  if(!lastDiffTmp||!lastDiffTmp.length){_showEvtMsg("请先切换到「对比差值」视图，再点击下载。");return;}
   const metric=el("evtDiffMetricSelect").value;
   const diffMode=el("evtDiffModeSelect").value;
   const isSD=metric==="供需";
   const deltaUnit=diffMode==="relative"?"%":"pp";
-  const underexpCells=lastDiffTmp.filter(x=>x.delta>0);
-  if(!underexpCells.length){_showEvtMsg("当前对比数据中没有欠曝光格子（份额上升）。");return;}
-  // 按 delta 降序（欠曝最严重的格子先遍历），保证酒店拿到的是最差格子的 delta
-  underexpCells.sort((a,b)=>b.delta-a.delta);
-  // 收集酒店（去重）
-  const seen=new Set();
+  const minImp=Math.max(1,Number(el("poorMinImpInput").value)||200);
+  // 按酒店ID建立对比数据索引
+  const compareMap=new Map();
+  compareRows.forEach(r=>{if(r.id!=null)compareMap.set(String(r.id),r);});
+  // 计算全城归一化系数（与格子视图保持一致）
+  let globalRatio=1,totalMainAll=0,totalCompAll=0;
+  const METRIC_F={曝光:IMP,点击:CLK,订单:ORD};
+  const mf=METRIC_F[metric]||IMP;
+  if(isSD){
+    const tmi=mainRows.reduce((s,r)=>s+(r[IMP]||0),0);
+    const tmo=mainRows.reduce((s,r)=>s+(r[ORD]||0),0);
+    const tci=compareRows.reduce((s,r)=>s+(r[IMP]||0),0);
+    const tco=compareRows.reduce((s,r)=>s+(r[ORD]||0),0);
+    const gcrM=tmi>0?tmo/tmi:0,gcrC=tci>0?tco/tci:0;
+    globalRatio=gcrM>0?gcrC/gcrM:1;
+  }else{
+    totalMainAll=mainRows.reduce((s,r)=>s+(r[mf]||0),0);
+    totalCompAll=compareRows.reduce((s,r)=>s+(r[mf]||0),0);
+    globalRatio=totalMainAll>0?(totalCompAll/totalMainAll):1;
+  }
+  // 逐酒店计算 delta（只算主数据曝光 >= minImp 且在对比数据中存在的酒店）
   const hotels=[];
-  underexpCells.forEach(({a,delta})=>{
-    (a.indices||[]).forEach(i=>{
-      if(!seen.has(i)){seen.add(i);const h=mainRows[i];if(h)hotels.push({...h,_cellDelta:delta});}
-    });
+  mainRows.forEach(h=>{
+    if((h[IMP]||0)<minImp)return;
+    if(h.id==null)return;
+    const c=compareMap.get(String(h.id));
+    if(!c)return;
+    let delta;
+    if(isSD){
+      const crM=h[IMP]>0?h[ORD]/h[IMP]:0;
+      const crC=c[IMP]>0?c[ORD]/c[IMP]:0;
+      delta=diffMode==="relative"
+        ?(crM>0?((crC-crM*globalRatio)/(crM*globalRatio)*100):(crC>0?100:0))
+        :((crC-crM)*10000);
+    }else{
+      const mShare=totalMainAll>0?(h[mf]||0)/totalMainAll:0;
+      const cShare=totalCompAll>0?(c[mf]||0)/totalCompAll:0;
+      delta=diffMode==="relative"
+        ?(mShare>0?((cShare-mShare)/mShare*100):(cShare>0?100:0))
+        :(cShare-mShare)*100;
+    }
+    if(Number.isFinite(delta)&&delta>0)hotels.push({...h,_hotelDelta:delta});
   });
-  // 按格子变化幅度降序（欠曝最严重在前）
-  hotels.sort((a,b)=>b._cellDelta-a._cellDelta);
+  if(!hotels.length){_showEvtMsg("当前没有欠曝光酒店（主数据曝光份额低于对比数据）。");return;}
+  // 按 delta 降序（欠曝最严重在前）
+  hotels.sort((a,b)=>b._hotelDelta-a._hotelDelta);
   // 生成 CSV
   function pct2(v){return v==null?"":(v*100).toFixed(2)+"%";}
-  const header=["酒店ID","酒店名称","曝光","点击","订单","CTR","CR","星级","挂牌","总订单额",`格子变化(${deltaUnit})`];
+  const header=["酒店ID","酒店名称","曝光","点击","订单","CTR","CR","星级","挂牌","总订单额",`酒店维度变化(${deltaUnit})`];
   const rows=hotels.map(h=>{
     const ctr=h[IMP]>0?h[CLK]/h[IMP]:null;
     const cr=h[IMP]>0?h[ORD]/h[IMP]:null;
-    const dVal=(isSD&&diffMode==="absolute")?h._cellDelta/100:h._cellDelta;
+    const dVal=(isSD&&diffMode==="absolute")?h._hotelDelta/100:h._hotelDelta;
     const dStr=Number.isFinite(dVal)?`${dVal>0?"+":""}${dVal.toFixed(2)}${deltaUnit}`:"";
     return [
       h.id, h.name||"",
@@ -519,7 +550,7 @@ function showUnderexposedModal(){
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download=`欠曝光酒店_${underexpCells.length}格子_${hotels.length}家.csv`;
+  a.href=url;a.download=`欠曝光酒店_酒店维度_${hotels.length}家.csv`;
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
 }
