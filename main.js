@@ -486,6 +486,8 @@ function showUnderexposedModal(){
   const deltaUnit=diffMode==="relative"?"%":"pp";
   const blueCells=lastDiffTmp.filter(x=>x.delta<0);
   if(!blueCells.length){_showEvtMsg("当前对比数据中没有欠曝光格子（份额下降）。");return;}
+  // 按 delta 升序（最差的格子先遍历），保证酒店拿到的是最差格子的 delta
+  blueCells.sort((a,b)=>a.delta-b.delta);
   // 收集酒店（去重）
   const seen=new Set();
   const hotels=[];
@@ -494,8 +496,8 @@ function showUnderexposedModal(){
       if(!seen.has(i)){seen.add(i);const h=mainRows[i];if(h)hotels.push({...h,_cellDelta:delta});}
     });
   });
-  // 按曝光降序排列
-  hotels.sort((a,b)=>b[IMP]-a[IMP]);
+  // 按格子变化幅度升序（最严重的在前）
+  hotels.sort((a,b)=>a._cellDelta-b._cellDelta);
   // 生成 CSV
   function pct2(v){return v==null?"":(v*100).toFixed(2)+"%";}
   const header=["酒店ID","酒店名称","曝光","点击","订单","CTR","CR","星级","挂牌","总订单额",`格子变化(${deltaUnit})`];
