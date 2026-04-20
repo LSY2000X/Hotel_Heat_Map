@@ -236,7 +236,7 @@ function renderDiffLegend(absThresholds,mode,metric){
   box.innerHTML="";
   const isAbsNonSD=mode!=="relative"&&metric!=="供需";
   const fmtAbsVal=v=>isAbsNonSD?Number(v).toFixed(3):fmt(v);
-  const absUnit=metric==="供需"?"万分点":"pp";
+  const absUnit="pp";
   const hdr=document.createElement("div");
   hdr.style.cssText="grid-column:1/-1;display:flex;justify-content:space-between;font-size:11px;font-weight:600;margin-bottom:6px;gap:4px;";
   hdr.innerHTML='<span style="flex:1;text-align:center;background:rgba(29,78,216,0.1);color:#1d4ed8;border-radius:6px;padding:2px 0;">对比下降（蓝）</span><span style="flex:1;text-align:center;background:rgba(220,38,38,0.1);color:#dc2626;border-radius:6px;padding:2px 0;">对比上升（红）</span>';
@@ -430,7 +430,7 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
   const diffVal=Number(diffProps.value);
   const sign=diffVal>0?"+":"";
   const _isSdModal=metric==="供需";
-  const diffLabel=Number.isFinite(diffVal)?(diffMode==="relative"?`${sign}${diffVal.toFixed(1)}%`:(_isSdModal?`${sign}${diffVal.toFixed(1)} 万分点`:`${sign}${diffVal.toFixed(4)} pp`)):"-";
+  const diffLabel=Number.isFinite(diffVal)?(diffMode==="relative"?`${sign}${diffVal.toFixed(1)}%`:(_isSdModal?`${sign}${(diffVal/100).toFixed(2)} pp`:`${sign}${diffVal.toFixed(4)} pp`)):"-";
   const color=diffVal>0?"#dc2626":diffVal<0?"#1d4ed8":"#6b7280";
   el("hotelModalTitle").textContent=`对比区块 · ${metric}`;
   let activeTab=mainHotels.length>0?"main":"compare";
@@ -475,7 +475,8 @@ function showDiffHotelModal(mainHotels,compareHotels,diffProps){
 }
 function showUnderexposedModal(){
   if(!mainRows?.length||!compareRows?.length){alert("请先上传主数据和对比数据。");return;}
-  if(!lastDiffTmp||!lastDiffTmp.length){alert("请先勾选「显示两组数据对比情况」生成对比视图，再点击此按钮。");return;}
+  if(!lastDiffTmp||!lastDiffTmp.length){setEvtViewMode("diff");}
+  if(!lastDiffTmp||!lastDiffTmp.length){alert("对比视图无满足门槛的格子，无法生成列表。");return;}
   const blueCells=lastDiffTmp.filter(x=>x.delta<0);
   if(!blueCells.length){alert("当前对比数据中没有欠曝光格子（delta < 0）。");return;}
   const seen=new Set();
@@ -649,7 +650,7 @@ function updateHeatLayer(geojson,palette,binCount){
           const delta=Number(p.value);
           const sign=delta>0?"+":"";
           const _isSdM=m==="供需";
-          const deltaText=!Number.isFinite(delta)?"—":(isRel?`${sign}${delta.toFixed(2)}%`:(_isSdM?`${sign}${delta.toFixed(1)} 万分点`:`${sign}${delta.toFixed(4)} pp`));
+          const deltaText=!Number.isFinite(delta)?"—":(isRel?`${sign}${delta.toFixed(2)}%`:(_isSdM?`${sign}${(delta/100).toFixed(2)} pp`:`${sign}${delta.toFixed(4)} pp`));
           const color=delta>10?"#dc2626":delta<-10?"#1d4ed8":"#6b7280";
           const fmtCR=(v)=>(Number(v)*100).toFixed(3)+"%";
           const fmtShare=(v)=>`${(Number(v)*100).toFixed(4)}%`;
