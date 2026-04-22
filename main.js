@@ -614,23 +614,27 @@ function renderLegend(thresholds,palette,metricName){
   }
 }const SRC="heat-src",FILL="heat-fill",LINE="heat-line",SCATTER_SRC="scatter-src",SCATTER_LAYER="scatter-circle";
 function showLayer(id,visible){if(map.getLayer(id))map.setLayoutProperty(id,"visibility",visible?"visible":"none");}
-function buildBaseStyle(source,tdKey){
+function buildBaseStyle(source,tdKey,mtKey){
   let tiles,attribution,tileSize=256;
   if(source==="amap_road"){tiles=["https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}","https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}","https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}","https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}"];attribution="© 高德地图";}
   else if(source==="amap_sat"){tiles=["https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}","https://webst02.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}","https://webst03.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}","https://webst04.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}"];attribution="© 高德地图（卫星）";}
   else if(source==="tianditu"&&tdKey){tiles=[`https://t0.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tdKey}`,`https://t1.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=${tdKey}`];attribution="© 天地图";}
+  else if(source==="maptiler"&&mtKey){tiles=[`https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${mtKey}`];attribution="© MapTiler © OpenStreetMap contributors";tileSize=256;}
   else if(source==="carto"){tiles=["https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png","https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"];attribution="© CARTO © OpenStreetMap contributors";}
   else{tiles=["https://tile.openstreetmap.org/{z}/{x}/{y}.png"];attribution="© OpenStreetMap contributors";}
   return{version:8,sources:{amap:{type:"raster",tiles,tileSize,attribution}},layers:[{id:"amap",type:"raster",source:"amap"}]};
 }
 const _savedSource=localStorage.getItem("mapSource")||"amap_road";
 const _savedTdKey=localStorage.getItem("tdKey")||"";
+const _savedMtKey=localStorage.getItem("maptilerKey")||"";
 document.getElementById("mapSourceSelect").value=_savedSource;
 if(_savedTdKey)document.getElementById("tdKeyInput").value=_savedTdKey;
+if(_savedMtKey)document.getElementById("maptilerKeyInput").value=_savedMtKey;
 if(_savedSource==="tianditu")document.getElementById("tdKeyWrap").style.display="block";
+if(_savedSource==="maptiler")document.getElementById("maptilerKeyWrap").style.display="block";
 const _savedMinImp=localStorage.getItem("minImpPerCell");
 if(_savedMinImp!==null&&_savedMinImp!=="")document.getElementById("poorMinImpInput").value=_savedMinImp;
-const map=new maplibregl.Map({container:"map",style:buildBaseStyle(_savedSource,_savedTdKey),center:[121.4737,31.2304],zoom:10.6});
+const map=new maplibregl.Map({container:"map",style:buildBaseStyle(_savedSource,_savedTdKey,_savedMtKey),center:[121.4737,31.2304],zoom:10.6});
 globalThis.__heatmapMap=map;
 map.addControl(new maplibregl.NavigationControl({showCompass:false}),"top-right");
 function onMapReady(cb){if(map.isStyleLoaded()){cb();}else{const retry=()=>{if(map.isStyleLoaded())cb();else map.once("styledata",retry);};map.once("styledata",retry);}}
@@ -1512,13 +1516,27 @@ function placeEventJumpStar(lon,lat){
 // 1 · 城市选择器
 // ============================================================
 (function(){
-  const CITY_ZOOM={上海:10.6,北京:10.2,广州:10.4,深圳:10.6,香港:11.0,重庆:10.0,成都:10.4,杭州:10.4};
+  const CITY_ZOOM={上海:10.6,北京:10.2,广州:10.4,深圳:10.6,香港:11.0,重庆:10.0,成都:10.4,杭州:10.4,新加坡:11.2,东京:10.5,首尔:10.5,曼谷:10.8};
+  const INTL_CITIES=new Set(["新加坡","东京","首尔","曼谷"]);
   document.querySelectorAll(".city-btn").forEach(btn=>{
     btn.addEventListener("click",()=>{
       // 高亮选中
       document.querySelectorAll(".city-btn").forEach(b=>b.classList.remove("city-active"));
       btn.classList.add("city-active");
       const lat=parseFloat(btn.dataset.lat),lon=parseFloat(btn.dataset.lon),name=btn.textContent.trim();
+      const isIntl=btn.dataset.intl==="true";
+      // 国际城市自动切换到 MapTiler
+      if(isIntl){
+        const mtKey=el("maptilerKeyInput").value.trim()||localStorage.getItem("maptilerKey")||"";
+        const curSrc=el("mapSourceSelect").value;
+        if(curSrc!=="maptiler"){
+          el("mapSourceSelect").value="maptiler";
+          el("tdKeyWrap").style.display="none";
+          el("maptilerKeyWrap").style.display="block";
+          if(mtKey)_applyMapStyle("maptiler",el("tdKeyInput").value.trim(),mtKey);
+          else _showEvtMsg("国际城市建议使用 MapTiler，请在底图设置中填入 API Key 后点击应用");
+        }
+      }
       // 更新 bbox 全局变量（复用热点事件变量）
       _evtLat=lat;_evtLon=lon;
       // 跳转地图
@@ -1713,13 +1731,23 @@ el("evtJumpBtn").addEventListener("click",()=>{
 // ============================================================
 // end 热点事件分析
 // ============================================================
-el("mapSourceSelect").addEventListener("change",()=>{el("tdKeyWrap").style.display=el("mapSourceSelect").value==="tianditu"?"block":"none";});
-el("applyMapBtn").addEventListener("click",()=>{
-  const src=el("mapSourceSelect").value,key=el("tdKeyInput").value.trim();
-  if(src==="tianditu"&&!key){alert("请输入天地图 token");return;}
-  localStorage.setItem("mapSource",src);localStorage.setItem("tdKey",key);
-  map.setStyle(buildBaseStyle(src,key));
+el("mapSourceSelect").addEventListener("change",()=>{
+  const v=el("mapSourceSelect").value;
+  el("tdKeyWrap").style.display=v==="tianditu"?"block":"none";
+  el("maptilerKeyWrap").style.display=v==="maptiler"?"block":"none";
+});
+function _applyMapStyle(src,tdKey,mtKey){
+  localStorage.setItem("mapSource",src);localStorage.setItem("tdKey",tdKey);localStorage.setItem("maptilerKey",mtKey);
+  map.setStyle(buildBaseStyle(src,tdKey,mtKey));
   map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();map.off('mousemove',TS_SD_FILL,_tsSdHoverHandler);map.off('mouseleave',TS_SD_FILL,_tsSdLeaveHandler);_tsBound=false;if(tsWeekMap)onMapReady(()=>{_ensureTsLayers();tsShowWeek(tsCurrentIdx);});});
+}
+el("applyMapBtn").addEventListener("click",()=>{
+  const src=el("mapSourceSelect").value;
+  const tdKey=el("tdKeyInput").value.trim();
+  const mtKey=el("maptilerKeyInput").value.trim();
+  if(src==="tianditu"&&!tdKey){_showEvtMsg("请输入天地图 token");return;}
+  if(src==="maptiler"&&!mtKey){_showEvtMsg("请输入 MapTiler API Key");return;}
+  _applyMapStyle(src,tdKey,mtKey);
 });
 
 // ============================================================

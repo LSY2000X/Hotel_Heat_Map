@@ -51,6 +51,10 @@
         <button class="city-btn" data-lat="29.5630" data-lon="106.5516">重庆</button>
         <button class="city-btn" data-lat="30.5728" data-lon="104.0668">成都</button>
         <button class="city-btn" data-lat="30.2741" data-lon="120.1551">杭州</button>
+        <button class="city-btn" data-lat="1.3521" data-lon="103.8198" data-intl="true">新加坡</button>
+        <button class="city-btn" data-lat="35.6762" data-lon="139.6503" data-intl="true">东京</button>
+        <button class="city-btn" data-lat="37.5665" data-lon="126.9780" data-intl="true">首尔</button>
+        <button class="city-btn" data-lat="13.7563" data-lon="100.5018" data-intl="true">曼谷</button>
       </div>
       <!-- 上传按钮（默认锁定，选城市后解锁） -->
       <label id="mainUploadLabel" class="upload-btn upload-locked" for="fileInput">
@@ -149,10 +153,15 @@
           <option value="tianditu">天地图（需 Key）</option>
           <option value="osm">OpenStreetMap</option>
           <option value="carto">CARTO</option>
+          <option value="maptiler">MapTiler（需 Key，国际推荐）</option>
         </select></div></div>
         <div id="tdKeyWrap" style="margin-top:7px;display:none;">
           <input id="tdKeyInput" type="text" placeholder="请输入天地图 token（tk=...）" style="width:100%;padding:9px 12px;border-radius:11px;border:1px solid rgba(0,0,0,0.12);font-size:12.5px;outline:none;background:rgba(255,255,255,0.85);" />
           <div class="msg msg-info" style="margin-top:5px;">前往 <a href="https://lbs.tianditu.gov.cn" target="_blank" style="color:var(--accent);">lbs.tianditu.gov.cn</a> 申请 token</div>
+        </div>
+        <div id="maptilerKeyWrap" style="margin-top:7px;display:none;">
+          <input id="maptilerKeyInput" type="text" placeholder="请输入 MapTiler API Key" style="width:100%;padding:9px 12px;border-radius:11px;border:1px solid rgba(0,0,0,0.12);font-size:12.5px;outline:none;background:rgba(255,255,255,0.85);" />
+          <div class="msg msg-info" style="margin-top:5px;">前往 <a href="https://cloud.maptiler.com" target="_blank" style="color:var(--accent);">cloud.maptiler.com</a> 免费注册获取 Key</div>
         </div>
         <button id="applyMapBtn" class="refresh-btn" style="margin-top:7px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
@@ -429,6 +438,6 @@
     <div id="map"></div>
   </main>
 </div>
-<script src="main.js?v=12"></script>
+<script src="main.js?v=13"></script>
 </body>
 </html>
