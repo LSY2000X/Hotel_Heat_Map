@@ -644,6 +644,8 @@ const goodPopup=new maplibregl.Popup({closeButton:false,closeOnClick:false,offse
 let hoverBound=false,clickBound=false;
 const EVT_CIRCLE5_SRC="evt-circle-5-src",EVT_CIRCLE5_FILL="evt-circle-5-fill",EVT_CIRCLE5_LINE="evt-circle-5-line";
 const EVT_CIRCLE9_SRC="evt-circle-9-src",EVT_CIRCLE9_FILL="evt-circle-9-fill",EVT_CIRCLE9_LINE="evt-circle-9-line";
+const EVT2_CIRCLE5_SRC="evt2-circle-5-src",EVT2_CIRCLE5_FILL="evt2-circle-5-fill",EVT2_CIRCLE5_LINE="evt2-circle-5-line";
+const EVT2_CIRCLE9_SRC="evt2-circle-9-src",EVT2_CIRCLE9_FILL="evt2-circle-9-fill",EVT2_CIRCLE9_LINE="evt2-circle-9-line";
 const POOR_SRC="poor-src",POOR_FILL="poor-fill",POOR_LINE="poor-line";
 const GOOD_SRC="good-src",GOOD_FILL="good-fill",GOOD_LINE="good-line";
 let poorHoverBound=false,poorLayerActive=false;
@@ -1170,7 +1172,9 @@ function aggregateAndRender(){
 function clearAllUploadedData(){
   if(!confirm("确定清除所有已上传数据？主上传与事件卡解析数据、地图热力与诊断/转化图层将一并清空，需重新上传。"))return;
   if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(_){}eventJumpStarMarker=null;}
+  if(eventJumpStarMarker2){try{eventJumpStarMarker2.remove();}catch(_){}eventJumpStarMarker2=null;}
   _eventJumpStarLon=_eventJumpStarLat=null;
+  _eventJumpStarLon2=_eventJumpStarLat2=null;
   if(typeof map!=="undefined"&&map)updateEventCircleLayers();
   cachedRows=null;cachedTotalRows=0;_rawUserRows=null;_isUserMode=false;
   mainRows=null;mainTotalRows=0;compareRows=null;compareTotalRows=0;compareFileName="";activeDatasetType="main";
@@ -1445,6 +1449,8 @@ const EVT_PRESET_CANTON={lat:23.104136,lon:113.355314};
 /** 仅「跳转至事件地点」时设置，用于地图上的五角星（与城市选择无关） */
 let _eventJumpStarLat=null,_eventJumpStarLon=null;
 let eventJumpStarMarker=null;
+let _eventJumpStarLat2=null,_eventJumpStarLon2=null;
+let eventJumpStarMarker2=null;
 function _buildCircleRing(lon,lat,radiusKm,segments=96){
   const EARTH_KM=6371;
   const toRad=d=>d*Math.PI/180,toDeg=r=>r*180/Math.PI;
@@ -1461,55 +1467,48 @@ function _buildCircleRing(lon,lat,radiusKm,segments=96){
   }
   return ring;
 }
-function _eventCircleGeoJSON(radiusKm){
-  if(_eventJumpStarLon==null||_eventJumpStarLat==null)return{type:"FeatureCollection",features:[]};
-  return{
-    type:"FeatureCollection",
-    features:[{
-      type:"Feature",
-      properties:{radiusKm},
-      geometry:{type:"Polygon",coordinates:[_buildCircleRing(_eventJumpStarLon,_eventJumpStarLat,radiusKm)]}
-    }]
-  };
+function _circleGeoJSON(lon,lat,radiusKm){
+  if(lon==null||lat==null)return{type:"FeatureCollection",features:[]};
+  return{type:"FeatureCollection",features:[{type:"Feature",properties:{radiusKm},geometry:{type:"Polygon",coordinates:[_buildCircleRing(lon,lat,radiusKm)]}}]};
 }
-function _ensureEventCircleLayer(radiusKm){
-  const src=radiusKm===5?EVT_CIRCLE5_SRC:EVT_CIRCLE9_SRC;
-  const fill=radiusKm===5?EVT_CIRCLE5_FILL:EVT_CIRCLE9_FILL;
-  const line=radiusKm===5?EVT_CIRCLE5_LINE:EVT_CIRCLE9_LINE;
+function _ensureCircleLayer(src,fill,line,color,radiusKm,geojson){
   const fillOpacity=radiusKm===5?0.07:0.045;
   const lineOpacity=radiusKm===5?0.9:0.75;
-  if(!map.getSource(src))map.addSource(src,{type:"geojson",data:_eventCircleGeoJSON(radiusKm)});
-  if(!map.getLayer(fill))map.addLayer({id:fill,type:"fill",source:src,paint:{"fill-color":"#dc2626","fill-opacity":fillOpacity}});
-  if(!map.getLayer(line))map.addLayer({id:line,type:"line",source:src,paint:{"line-color":"#dc2626","line-width":2,"line-opacity":lineOpacity}});
+  if(!map.getSource(src))map.addSource(src,{type:"geojson",data:geojson});
+  if(!map.getLayer(fill))map.addLayer({id:fill,type:"fill",source:src,paint:{"fill-color":color,"fill-opacity":fillOpacity}});
+  if(!map.getLayer(line))map.addLayer({id:line,type:"line",source:src,paint:{"line-color":color,"line-width":2,"line-opacity":lineOpacity}});
 }
-function _setEventCircleVisible(radiusKm,visible){
-  const src=radiusKm===5?EVT_CIRCLE5_SRC:EVT_CIRCLE9_SRC;
-  const fill=radiusKm===5?EVT_CIRCLE5_FILL:EVT_CIRCLE9_FILL;
-  const line=radiusKm===5?EVT_CIRCLE5_LINE:EVT_CIRCLE9_LINE;
-  _ensureEventCircleLayer(radiusKm);
-  if(map.getSource(src))map.getSource(src).setData(_eventCircleGeoJSON(radiusKm));
+function _setCircleVisible(src,fill,line,color,radiusKm,lon,lat,visible){
+  const geojson=_circleGeoJSON(lon,lat,radiusKm);
+  _ensureCircleLayer(src,fill,line,color,radiusKm,geojson);
+  if(map.getSource(src))map.getSource(src).setData(geojson);
   if(map.getLayer(fill))map.setLayoutProperty(fill,"visibility",visible?"visible":"none");
   if(map.getLayer(line))map.setLayoutProperty(line,"visibility",visible?"visible":"none");
 }
 function updateEventCircleLayers(){
-  const show5=Boolean(el("evtCircle5Chk")?.checked);
-  const show9=Boolean(el("evtCircle9Chk")?.checked);
-  const hasCenter=_eventJumpStarLon!=null&&_eventJumpStarLat!=null;
-  _setEventCircleVisible(5,show5&&hasCenter);
-  _setEventCircleVisible(9,show9&&hasCenter);
+  const has1=_eventJumpStarLon!=null&&_eventJumpStarLat!=null;
+  const has2=_eventJumpStarLon2!=null&&_eventJumpStarLat2!=null;
+  _setCircleVisible(EVT_CIRCLE5_SRC,EVT_CIRCLE5_FILL,EVT_CIRCLE5_LINE,"#dc2626",5,_eventJumpStarLon,_eventJumpStarLat,has1&&Boolean(el("evtCircle5Chk")?.checked));
+  _setCircleVisible(EVT_CIRCLE9_SRC,EVT_CIRCLE9_FILL,EVT_CIRCLE9_LINE,"#dc2626",9,_eventJumpStarLon,_eventJumpStarLat,has1&&Boolean(el("evtCircle9Chk")?.checked));
+  _setCircleVisible(EVT2_CIRCLE5_SRC,EVT2_CIRCLE5_FILL,EVT2_CIRCLE5_LINE,"#f97316",5,_eventJumpStarLon2,_eventJumpStarLat2,has2&&Boolean(el("evtCircle5Chk2")?.checked));
+  _setCircleVisible(EVT2_CIRCLE9_SRC,EVT2_CIRCLE9_FILL,EVT2_CIRCLE9_LINE,"#f97316",9,_eventJumpStarLon2,_eventJumpStarLat2,has2&&Boolean(el("evtCircle9Chk2")?.checked));
+}
+function _makeStarEl(color,stroke,title){
+  const wrap=document.createElement("div");
+  wrap.className="map-event-star";wrap.title=title;
+  wrap.innerHTML=`<svg width="17" height="17" viewBox="0 0 24 24"><path fill="${color}" stroke="${stroke}" stroke-width="0.35" stroke-linejoin="round" d="M12 1l3.09 6.26L22 8.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25 1.18-6.88-5-4.87 6.91-1.01L12 1z"/></svg>`;
+  return wrap;
 }
 function placeEventJumpStar(lon,lat){
   _eventJumpStarLon=lon;_eventJumpStarLat=lat;
-  const lngLat=[lon,lat];
-  if(!eventJumpStarMarker){
-    const wrap=document.createElement("div");
-    wrap.className="map-event-star";
-    wrap.title="事件地点";
-    wrap.innerHTML='<svg width="17" height="17" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#dc2626" stroke="#991b1b" stroke-width="0.35" stroke-linejoin="round" d="M12 1l3.09 6.26L22 8.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25 1.18-6.88-5-4.87 6.91-1.01L12 1z"/></svg>';
-    eventJumpStarMarker=new maplibregl.Marker({element:wrap,anchor:"center"}).setLngLat(lngLat).addTo(map);
-  }else{
-    eventJumpStarMarker.setLngLat(lngLat);
-  }
+  if(!eventJumpStarMarker)eventJumpStarMarker=new maplibregl.Marker({element:_makeStarEl("#dc2626","#991b1b","事件地点 1"),anchor:"center"}).setLngLat([lon,lat]).addTo(map);
+  else eventJumpStarMarker.setLngLat([lon,lat]);
+  updateEventCircleLayers();
+}
+function placeEventJumpStar2(lon,lat){
+  _eventJumpStarLon2=lon;_eventJumpStarLat2=lat;
+  if(!eventJumpStarMarker2)eventJumpStarMarker2=new maplibregl.Marker({element:_makeStarEl("#f97316","#c2410c","事件地点 2"),anchor:"center"}).setLngLat([lon,lat]).addTo(map);
+  else eventJumpStarMarker2.setLngLat([lon,lat]);
   updateEventCircleLayers();
 }
 // ============================================================
@@ -1709,6 +1708,8 @@ el("evtUnderexpBtn")?.addEventListener("click",showUnderexposedModal);
 el("evtApplyBtn").addEventListener("click",_applyEvtFilters);
 el("evtCircle5Chk").addEventListener("change",updateEventCircleLayers);
 el("evtCircle9Chk").addEventListener("change",updateEventCircleLayers);
+el("evtCircle5Chk2").addEventListener("change",updateEventCircleLayers);
+el("evtCircle9Chk2").addEventListener("change",updateEventCircleLayers);
 el("evtPresetCanton").addEventListener("change",(e)=>{
   if(!e.target.checked)return;
   el("evtLat").value=String(EVT_PRESET_CANTON.lat);
@@ -1718,15 +1719,19 @@ el("evtPresetCanton").addEventListener("change",(e)=>{
 // 跳转按钮
 el("evtJumpBtn").addEventListener("click",()=>{
   const lat=parseFloat(el("evtLat").value),lon=parseFloat(el("evtLon").value);
-  if(!isFinite(lat)||!isFinite(lon)){alert("请填写有效的纬度和经度。");return;}
-  if(lat<18||lat>53||lon<73||lon>135){alert("坐标不在中国大陆范围内（纬度 18–53°，经度 73–135°）。");return;}
+  if(!isFinite(lat)||!isFinite(lon)){_showEvtMsg("请填写有效的纬度和经度。");return;}
   _evtLat=lat;_evtLon=lon;
   const sd=el("evtStart").value,ed=el("evtEnd").value;
   _evtStart=sd||null;_evtEnd=ed||null;
   placeEventJumpStar(lon,lat);
   map.flyTo({center:[lon,lat],zoom:10.5,speed:1.4});
-  // 若已有用户维度数据，重新聚合（bbox 可能变了）
   if(_rawUserRows)_applyEvtFilters();
+});
+el("evtJumpBtn2").addEventListener("click",()=>{
+  const lat=parseFloat(el("evtLat2").value),lon=parseFloat(el("evtLon2").value);
+  if(!isFinite(lat)||!isFinite(lon)){_showEvtMsg("请填写有效的纬度和经度（地点 2）。");return;}
+  placeEventJumpStar2(lon,lat);
+  map.flyTo({center:[lon,lat],zoom:10.5,speed:1.4});
 });
 // ============================================================
 // end 热点事件分析
@@ -1739,7 +1744,7 @@ el("mapSourceSelect").addEventListener("change",()=>{
 function _applyMapStyle(src,tdKey,mtKey){
   localStorage.setItem("mapSource",src);localStorage.setItem("tdKey",tdKey);localStorage.setItem("maptilerKey",mtKey);
   map.setStyle(buildBaseStyle(src,tdKey,mtKey));
-  map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();map.off('mousemove',TS_SD_FILL,_tsSdHoverHandler);map.off('mouseleave',TS_SD_FILL,_tsSdLeaveHandler);_tsBound=false;if(tsWeekMap)onMapReady(()=>{_ensureTsLayers();tsShowWeek(tsCurrentIdx);});});
+  map.once("styledata",()=>{hoverBound=false;clickBound=false;poorHoverBound=false;goodHoverBound=false;hlHoverBound=false;lhHoverBound=false;if(eventJumpStarMarker){try{eventJumpStarMarker.remove();}catch(e){}eventJumpStarMarker=null;}if(eventJumpStarMarker2){try{eventJumpStarMarker2.remove();}catch(e){}eventJumpStarMarker2=null;}if(_eventJumpStarLon!=null&&_eventJumpStarLat!=null)placeEventJumpStar(_eventJumpStarLon,_eventJumpStarLat);if(_eventJumpStarLon2!=null&&_eventJumpStarLat2!=null)placeEventJumpStar2(_eventJumpStarLon2,_eventJumpStarLat2);updateEventCircleLayers();if(cachedRows){if(evtViewMode==="diff")renderDiffComparison();else aggregateAndRender();}if(hlLayerActive)detectHlHexagons();if(lhLayerActive)detectLhHexagons();map.off('mousemove',TS_SD_FILL,_tsSdHoverHandler);map.off('mouseleave',TS_SD_FILL,_tsSdLeaveHandler);_tsBound=false;if(tsWeekMap)onMapReady(()=>{_ensureTsLayers();tsShowWeek(tsCurrentIdx);});});
 }
 el("applyMapBtn").addEventListener("click",()=>{
   const src=el("mapSourceSelect").value;

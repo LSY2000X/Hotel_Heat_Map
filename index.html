@@ -176,32 +176,61 @@
     <div class="card" id="eventCard">
       <p class="sec-label">3 · 热点事件分析</p>
       <p style="font-size:12px;color:var(--muted);line-height:1.55;margin:0 0 12px;">设置事件地点与日期，地图自动跳转；可上传对比数据，并通过开关在主数据/对比数据间查看热力图差异。</p>
-      <!-- 地点 + 日期 -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:7px;">
-        <div><div class="evt-label">事件纬度</div><input id="evtLat" class="evt-input" type="number" step="0.0001" min="18" max="53" placeholder="如 31.2304" /></div>
-        <div><div class="evt-label">事件经度</div><input id="evtLon" class="evt-input" type="number" step="0.0001" min="73" max="135" placeholder="如 121.4737" /></div>
-      </div>
+      <!-- 日期 -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px;">
         <div><div class="evt-label">开始日期</div><input id="evtStart" class="evt-input" type="date" /></div>
         <div><div class="evt-label">结束日期</div><input id="evtEnd" class="evt-input" type="date" /></div>
       </div>
+      <!-- 广交会预设 -->
       <label class="evt-filter-row" for="evtPresetCanton" style="margin-bottom:10px;background:rgba(37,99,235,0.05);border-color:rgba(37,99,235,0.2);">
         <input type="checkbox" id="evtPresetCanton" />
         <span>示例：广交会场馆（23.104136, 113.355314）</span>
       </label>
-      <button id="evtJumpBtn" class="refresh-btn" style="margin-top:0;background:#5856d6;">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/></svg>
-        跳转至事件地点
-      </button>
-      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
-        <label class="evt-filter-row" for="evtCircle5Chk" style="background:rgba(220,38,38,0.04);border-color:rgba(220,38,38,0.2);">
-          <input type="checkbox" id="evtCircle5Chk" />
-          <span>展示 5km 画圈范围</span>
-        </label>
-        <label class="evt-filter-row" for="evtCircle9Chk" style="background:rgba(220,38,38,0.04);border-color:rgba(220,38,38,0.2);">
-          <input type="checkbox" id="evtCircle9Chk" />
-          <span>展示 9km 画圈范围</span>
-        </label>
+      <!-- 事件地点 1（红色）-->
+      <div style="border:1px solid rgba(220,38,38,0.25);border-radius:10px;padding:9px 10px;margin-bottom:8px;background:rgba(220,38,38,0.025);">
+        <div style="font-size:11px;font-weight:600;color:#dc2626;margin-bottom:6px;display:flex;align-items:center;gap:5px;">
+          <svg width="11" height="11" viewBox="0 0 24 24"><path fill="#dc2626" d="M12 1l3.09 6.26L22 8.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25 1.18-6.88-5-4.87 6.91-1.01L12 1z"/></svg>
+          事件地点 1
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+          <div><div class="evt-label">纬度</div><input id="evtLat" class="evt-input" type="number" step="0.0001" placeholder="如 31.2304" /></div>
+          <div><div class="evt-label">经度</div><input id="evtLon" class="evt-input" type="number" step="0.0001" placeholder="如 121.4737" /></div>
+        </div>
+        <button id="evtJumpBtn" class="refresh-btn" style="margin-top:0;background:#dc2626;font-size:12px;padding:7px 10px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/></svg>
+          设为地点 1 并跳转
+        </button>
+        <div style="margin-top:6px;display:flex;gap:6px;">
+          <label class="evt-filter-row" for="evtCircle5Chk" style="flex:1;background:rgba(220,38,38,0.04);border-color:rgba(220,38,38,0.2);">
+            <input type="checkbox" id="evtCircle5Chk" /><span>5km 圈</span>
+          </label>
+          <label class="evt-filter-row" for="evtCircle9Chk" style="flex:1;background:rgba(220,38,38,0.04);border-color:rgba(220,38,38,0.2);">
+            <input type="checkbox" id="evtCircle9Chk" /><span>9km 圈</span>
+          </label>
+        </div>
+      </div>
+      <!-- 事件地点 2（橙色，可选）-->
+      <div style="border:1px solid rgba(249,115,22,0.25);border-radius:10px;padding:9px 10px;background:rgba(249,115,22,0.025);">
+        <div style="font-size:11px;font-weight:600;color:#f97316;margin-bottom:6px;display:flex;align-items:center;gap:5px;">
+          <svg width="11" height="11" viewBox="0 0 24 24"><path fill="#f97316" d="M12 1l3.09 6.26L22 8.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25 1.18-6.88-5-4.87 6.91-1.01L12 1z"/></svg>
+          事件地点 2 <span style="font-weight:400;color:var(--muted);font-size:10px;">（可选）</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+          <div><div class="evt-label">纬度</div><input id="evtLat2" class="evt-input" type="number" step="0.0001" placeholder="如 23.1042" /></div>
+          <div><div class="evt-label">经度</div><input id="evtLon2" class="evt-input" type="number" step="0.0001" placeholder="如 113.3553" /></div>
+        </div>
+        <button id="evtJumpBtn2" class="refresh-btn" style="margin-top:0;background:#f97316;font-size:12px;padding:7px 10px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"/></svg>
+          设为地点 2 并跳转
+        </button>
+        <div style="margin-top:6px;display:flex;gap:6px;">
+          <label class="evt-filter-row" for="evtCircle5Chk2" style="flex:1;background:rgba(249,115,22,0.04);border-color:rgba(249,115,22,0.25);">
+            <input type="checkbox" id="evtCircle5Chk2" /><span>5km 圈</span>
+          </label>
+          <label class="evt-filter-row" for="evtCircle9Chk2" style="flex:1;background:rgba(249,115,22,0.04);border-color:rgba(249,115,22,0.25);">
+            <input type="checkbox" id="evtCircle9Chk2" /><span>9km 圈</span>
+          </label>
+        </div>
       </div>
       <div id="evtConvSection" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,0.06);display:none;"><!-- 暂时隐藏，代码保留 -->
         <div style="font-size:11.5px;color:var(--muted);font-weight:600;margin-bottom:8px;">转化效率 × 曝光结构</div>
@@ -438,6 +467,6 @@
     <div id="map"></div>
   </main>
 </div>
-<script src="main.js?v=13"></script>
+<script src="main.js?v=14"></script>
 </body>
 </html>
