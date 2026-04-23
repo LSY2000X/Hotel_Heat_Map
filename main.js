@@ -32,8 +32,9 @@ function _getModeContext(){
 }
 const SH_BBOX={minLon:120.8,maxLon:122.0,minLat:30.5,maxLat:31.9};
 const IMP="曝光",CLK="点击",ORD="订单",STAR="星级",LIST="挂牌",GMV="订单额";
-const SD="供需情况",SDGMV="供需·GMV",SDCLK="供需·点击";
-const METRIC_UNIT={"曝光":"次","点击":"次","订单":"单","供需情况":"(log₂)","供需·GMV":"(log₂)","供需·点击":"(log₂)","供需":"万分点","星级":"星","挂牌":"","极好酒店":"元/次","极差酒店":"元/次"};
+const SD="供需情况",SDGMV="供需·GMV",SDCLK="供需·点击",IMB="失衡系数";
+const METRIC_UNIT={"曝光":"次","点击":"次","订单":"单","供需情况":"(log₂)","供需·GMV":"(log₂)","供需·点击":"(log₂)","供需":"万分点","星级":"星","挂牌":"","极好酒店":"元/次","极差酒店":"元/次","失衡系数":"pp"};
+const IMB_PALETTE=["#16a34a","#4ade80","#bef264","#fde047","#fb923c","#ef4444","#991b1b"];
 // 对比聚合使用的是英文字段键（imp/clk/ord），不能直接用中文展示名
 const DIFF_METRIC_FIELD={曝光:"imp",点击:"clk",订单:"ord"};
 const DIFF_MODE_LABEL={relative:"相对变化",absolute:"绝对变化"};
@@ -682,6 +683,12 @@ function updateHeatLayer(geojson,palette,binCount){
           const preStr=_isSdM?fmtCR(p.preVal):fmtShare(p.preVal);
           const postStr=_isSdM?fmtCR(p.postVal):fmtShare(p.postVal);
           html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${color};">${p.metric}：${deltaText}</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>${_isSdM?"主CR":"主占比"}：${preStr}</span><span>${_isSdM?"对比CR":"对比占比"}：${postStr}</span><span>主曝光：${Math.round(p.preImp).toLocaleString()}</span><span>对比曝光：${Math.round(p.postImp).toLocaleString()}</span><span>主酒店数：${p.preCount} 家</span><span>对比酒店数：${p.postCount} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
+        }else if(p.metric===IMB){
+          const imb=Number(p.value).toFixed(3);
+          const impPct=(Number(p.impShare)*100).toFixed(4);
+          const ordPct=(Number(p.ordShare)*100).toFixed(4);
+          const lc=Number(p.value)<0.5?"#16a34a":Number(p.value)<1.5?"#fb923c":"#dc2626";
+          html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${lc};">失衡系数：${imb} pp</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>曝光占比：${impPct}%</span><span>订单占比：${ordPct}%</span><span style="margin-top:2px;">曝光：${Math.round(p.imp).toLocaleString()} 次</span><span>订单：${Math.round(p.ord).toLocaleString()} 单</span><span>酒店数：${p.count} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
         }else if(p.metric===SD||p.metric===SDGMV||p.metric===SDCLK){
           const isG=p.metric===SDGMV,isCLK=p.metric===SDCLK,score=p.value,isLD=p.bin===10;
           const label=isLD?"数据不足":score>0.1?"欠曝":score<-0.1?"过曝":"均衡";
@@ -1025,7 +1032,7 @@ function aggregateAndRender(){
   if(!cachedRows||!cachedRows.length)return;
   _hideTsLayers();
   const resolution=Number(el("resSelect").value),binMethod=el("binSelect").value,metric=el("metricSelect").value;
-  const isSD=metric===SD,isSDGMV=metric===SDGMV,isSDCLK=metric===SDCLK,isSDType=isSD||isSDGMV||isSDCLK,isAvg=AVG_METRICS.has(metric);
+  const isSD=metric===SD,isSDGMV=metric===SDGMV,isSDCLK=metric===SDCLK,isSDType=isSD||isSDGMV||isSDCLK,isIMB=metric===IMB,isAvg=AVG_METRICS.has(metric);
   const binCount=isSDType?10:Number(el("binCountSelect").value);
   if(isAvg){
     showLayer(FILL,false);showLayer(LINE,false);
@@ -1127,6 +1134,28 @@ function aggregateAndRender(){
     el("statCellsLabel").textContent="H3 格子数（≥门槛）";el("statCells").textContent=nonEmpty.length.toLocaleString();
     el("statSumLabel").textContent="数据不足 / 过曝 / 正常";
     el("statSum").textContent=`${eLowData.length} / ${eOver.length} / ${eNorm.length+eUnder.length}`;
+  }else if(isIMB){
+    const tImp=cachedRows.reduce((s,r)=>s+r[IMP],0);
+    const tOrd=cachedRows.reduce((s,r)=>s+r[ORD],0);
+    if(!entriesMeet.length||tImp===0||tOrd===0){
+      onMapReady(()=>{updateHeatLayer({type:"FeatureCollection",features:[]},IMB_PALETTE,IMB_PALETTE.length);el("legendBox").innerHTML="";});
+      el("statCellsLabel").textContent="H3 格子数（≥门槛）";el("statCells").textContent="0";
+      el("statSumLabel").textContent="失衡系数均值";el("statSum").textContent="—";
+    }else{
+      const imbVals=entriesMeet.map(([,v])=>Math.abs((v.ord/tOrd)-(v.imp/tImp))*100);
+      const maxImb=Math.max(...imbVals,0.0001);
+      const binN=IMB_PALETTE.length;
+      thresholds=Array.from({length:binN-1},(_,i)=>(i+1)/binN*maxImb);
+      features=entriesMeet.map(([idx,v],i)=>({
+        type:"Feature",
+        properties:{h3:idx,metric,value:imbVals[i],impShare:tImp>0?v.imp/tImp:0,ordShare:tOrd>0?v.ord/tOrd:0,imp:v.imp,clk:v.clk,ord:v.ord,count:v.count,hotelIndices:JSON.stringify(v.indices),bin:assignBin(imbVals[i],thresholds,binN)},
+        geometry:{type:"Polygon",coordinates:[h3Boundary(idx)]}
+      }));
+      onMapReady(()=>{updateHeatLayer({type:"FeatureCollection",features},IMB_PALETTE,binN);renderLegend(thresholds,IMB_PALETTE,metric);});
+      el("statCellsLabel").textContent="H3 格子数（≥门槛）";el("statCells").textContent=entriesMeet.length.toLocaleString();
+      el("statSumLabel").textContent="失衡系数均值";
+      el("statSum").textContent=(imbVals.reduce((a,b)=>a+b,0)/imbVals.length).toFixed(3)+"pp";
+    }
   }else{
     if(!entriesMeet.length){
       thresholds=[];palette=buildPalette(binCount);values=[];features=[];
@@ -1275,6 +1304,7 @@ el("refreshBtn").addEventListener("click",()=>{
 });
 el("poorMinImpInput").addEventListener("change",applyGlobalMinImpThreshold);
 const SD_NOTES={
+  "失衡系数":`<strong style="font-size:12px;color:rgba(0,0,0,0.7);">失衡系数说明</strong><br/><code style="font-size:11px;">失衡系数 = |订单占比 − 曝光占比|（单位：pp）</code><br/>越绿越均衡，越红越失衡（不区分欠曝/过曝方向）。<br/>适合对比实验：蓝/绿 = 实验组缩小了供需缺口。`,
   "供需情况":`<strong style="font-size:12px;color:rgba(0,0,0,0.7);">供需情况说明</strong><br/><code style="font-size:11px;">score = log₂(订单占比 ÷ 曝光占比)</code><br/>score &gt; 0 表示欠曝，score &lt; 0 表示过曝，共分 10 档展示。`,
   "供需·GMV":`<strong style="font-size:12px;color:rgba(0,0,0,0.7);">供需·GMV 说明</strong><br/><code style="font-size:11px;">score = log₂(GMV占比 ÷ 曝光占比)</code><br/>解决高价酒店 CVR 天然偏低导致原供需指标失准的问题。`,
   "供需·点击":`<strong style="font-size:12px;color:rgba(0,0,0,0.7);">供需·点击 说明</strong><br/><code style="font-size:11px;">score = log₂(点击占比 ÷ 曝光占比) = log₂(该格子CTR ÷ 全城平均CTR)</code><br/>score &lt; 0（蓝）：曝光多但点击少，内容匹配度低；score &gt; 0（红）：点击效率高于均值，值得增加曝光。`,
