@@ -240,7 +240,9 @@ function renderDiffLegend(absThresholds,mode,metric){
   const absUnit="pp";
   const hdr=document.createElement("div");
   hdr.style.cssText="grid-column:1/-1;display:flex;justify-content:space-between;font-size:11px;font-weight:600;margin-bottom:6px;gap:4px;";
-  hdr.innerHTML='<span style="flex:1;text-align:center;background:rgba(29,78,216,0.1);color:#1d4ed8;border-radius:6px;padding:2px 0;">对比下降（蓝）</span><span style="flex:1;text-align:center;background:rgba(220,38,38,0.1);color:#dc2626;border-radius:6px;padding:2px 0;">对比上升（红）</span>';
+  hdr.innerHTML=metric==="失衡系数"
+    ?'<span style="flex:1;text-align:center;background:rgba(29,78,216,0.1);color:#1d4ed8;border-radius:6px;padding:2px 0;">失衡收窄（蓝）</span><span style="flex:1;text-align:center;background:rgba(220,38,38,0.1);color:#dc2626;border-radius:6px;padding:2px 0;">失衡加剧（红）</span>'
+    :'<span style="flex:1;text-align:center;background:rgba(29,78,216,0.1);color:#1d4ed8;border-radius:6px;padding:2px 0;">对比下降（蓝）</span><span style="flex:1;text-align:center;background:rgba(220,38,38,0.1);color:#dc2626;border-radius:6px;padding:2px 0;">对比上升（红）</span>';
   box.appendChild(hdr);
   for(let i=0;i<DIFF_BIN_COLORS.length;i++){
     const sw=document.createElement("div");
@@ -298,14 +300,20 @@ function renderDiffComparison(){
     return true;
   }
   const isSD=metric==="供需";
+  const isDiffIMB=metric==="失衡系数";
   let globalRatio,totalMainAll=0,totalCompAll=0;
-  if(isSD){
+  let totalMainImp=0,totalMainOrd=0,totalCompImp=0,totalCompOrd=0;
+  if(isDiffIMB){
+    totalMainImp=[...mainAgg.values()].reduce((s,v)=>s+(v.imp||0),0);
+    totalMainOrd=[...mainAgg.values()].reduce((s,v)=>s+(v.ord||0),0);
+    totalCompImp=[...compareAgg.values()].reduce((s,v)=>s+(v.imp||0),0);
+    totalCompOrd=[...compareAgg.values()].reduce((s,v)=>s+(v.ord||0),0);
+  }else if(isSD){
     const tmi=cells.reduce((s,c)=>s+((mainAgg.get(c)?.imp)||0),0),tmo=cells.reduce((s,c)=>s+((mainAgg.get(c)?.ord)||0),0);
     const tci=cells.reduce((s,c)=>s+((compareAgg.get(c)?.imp)||0),0),tco=cells.reduce((s,c)=>s+((compareAgg.get(c)?.ord)||0),0);
     const gcrM=tmi>0?tmo/tmi:0,gcrC=tci>0?tco/tci:0;
     globalRatio=gcrM>0?gcrC/gcrM:1;
   }else{
-    // 用全城所有格子的总量（而非过滤后的格子），以便正确计算份额
     totalMainAll=[...mainAgg.values()].reduce((s,v)=>s+(v[metricField]||0),0);
     totalCompAll=[...compareAgg.values()].reduce((s,v)=>s+(v[metricField]||0),0);
     globalRatio=totalMainAll>0?(totalCompAll/totalMainAll):1;
@@ -315,7 +323,11 @@ function renderDiffComparison(){
     const a=mainAgg.get(cell)||{imp:0,clk:0,ord:0,count:0,indices:[]};
     const b=compareAgg.get(cell)||{imp:0,clk:0,ord:0,count:0,indices:[]};
     let delta;
-    if(isSD){
+    if(isDiffIMB){
+      const mImb=Math.abs((totalMainOrd>0?(a.ord/totalMainOrd):0)-(totalMainImp>0?(a.imp/totalMainImp):0))*100;
+      const cImb=Math.abs((totalCompOrd>0?(b.ord/totalCompOrd):0)-(totalCompImp>0?(b.imp/totalCompImp):0))*100;
+      delta=cImb-mImb; // 负 = 对比期更均衡
+    }else if(isSD){
       const crM=a.imp>0?a.ord/a.imp:0,crC=b.imp>0?b.ord/b.imp:0;
       delta=diffMode==="relative"
         ?(crM>0?((crC-crM*globalRatio)/(crM*globalRatio)*100):(crC>0?100:0))
@@ -326,7 +338,7 @@ function renderDiffComparison(){
       const cShare=totalCompAll>0?comp/totalCompAll:0;
       delta=diffMode==="relative"
         ?(mShare>0?((cShare-mShare)/mShare*100):(cShare>0?100:0))
-        :((cShare-mShare)*100);  // 单位：百分点(pp)
+        :((cShare-mShare)*100);
     }
     tmp.push({cell,a,b,delta});
   });
@@ -335,11 +347,14 @@ function renderDiffComparison(){
   const features=tmp.map(({cell,a,b,delta})=>{
     const d=Number.isFinite(delta)?delta:0;
     const bin=_assignDiffBin(d,absThresholds);
+    const mImb=isDiffIMB?Math.abs((totalMainOrd>0?a.ord/totalMainOrd:0)-(totalMainImp>0?a.imp/totalMainImp:0))*100:0;
+    const cImb=isDiffIMB?Math.abs((totalCompOrd>0?b.ord/totalCompOrd:0)-(totalCompImp>0?b.imp/totalCompImp:0))*100:0;
     return{
       type:"Feature",
       properties:{
         h3:cell,metric:`对比-${metric}`,diffMode,bin,value:d,
-        preVal:isSD?(a.imp>0?a.ord/a.imp:0):(totalMainAll>0?(a[metricField]||0)/totalMainAll:0),postVal:isSD?(b.imp>0?b.ord/b.imp:0):(totalCompAll>0?(b[metricField]||0)/totalCompAll:0),
+        preVal:isDiffIMB?mImb:isSD?(a.imp>0?a.ord/a.imp:0):(totalMainAll>0?(a[metricField]||0)/totalMainAll:0),
+        postVal:isDiffIMB?cImb:isSD?(b.imp>0?b.ord/b.imp:0):(totalCompAll>0?(b[metricField]||0)/totalCompAll:0),
         preImp:a.imp||0,postImp:b.imp||0,preCount:a.count||0,postCount:b.count||0,
         mainIndices:JSON.stringify(a.indices||[]),compareIndices:JSON.stringify(b.indices||[])
       },
@@ -676,13 +691,18 @@ function updateHeatLayer(geojson,palette,binCount){
           const delta=Number(p.value);
           const sign=delta>0?"+":"";
           const _isSdM=m==="供需";
-          const deltaText=!Number.isFinite(delta)?"—":(isRel?`${sign}${delta.toFixed(2)}%`:(_isSdM?`${sign}${(delta/100).toFixed(2)} pp`:`${sign}${delta.toFixed(4)} pp`));
-          const color=delta>10?"#dc2626":delta<-10?"#1d4ed8":"#6b7280";
+          const _isIMBM=m==="失衡系数";
+          const deltaText=!Number.isFinite(delta)?"—":(_isIMBM?`${sign}${delta.toFixed(3)} pp`:(isRel?`${sign}${delta.toFixed(2)}%`:(_isSdM?`${sign}${(delta/100).toFixed(2)} pp`:`${sign}${delta.toFixed(4)} pp`)));
+          const color=_isIMBM?(delta<-0.05?"#1d4ed8":delta>0.05?"#dc2626":"#6b7280"):(delta>10?"#dc2626":delta<-10?"#1d4ed8":"#6b7280");
+          if(_isIMBM){
+            html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${color};">失衡系数变化：${deltaText}</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>主数据失衡系数：${Number(p.preVal).toFixed(3)} pp</span><span>对比数据失衡系数：${Number(p.postVal).toFixed(3)} pp</span><span style="margin-top:2px;">主曝光：${Math.round(p.preImp).toLocaleString()}</span><span>对比曝光：${Math.round(p.postImp).toLocaleString()}</span><span>主酒店数：${p.preCount} 家</span><span>对比酒店数：${p.postCount} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
+          }else{
           const fmtCR=(v)=>(Number(v)*100).toFixed(3)+"%";
           const fmtShare=(v)=>`${(Number(v)*100).toFixed(4)}%`;
           const preStr=_isSdM?fmtCR(p.preVal):fmtShare(p.preVal);
           const postStr=_isSdM?fmtCR(p.postVal):fmtShare(p.postVal);
           html=`<div style="font-weight:700;font-size:14px;margin-bottom:6px;color:${color};">${p.metric}：${deltaText}</div><div style="color:rgba(0,0,0,0.55);font-size:12px;display:flex;flex-direction:column;gap:3px;"><span>${_isSdM?"主CR":"主占比"}：${preStr}</span><span>${_isSdM?"对比CR":"对比占比"}：${postStr}</span><span>主曝光：${Math.round(p.preImp).toLocaleString()}</span><span>对比曝光：${Math.round(p.postImp).toLocaleString()}</span><span>主酒店数：${p.preCount} 家</span><span>对比酒店数：${p.postCount} 家</span></div><div style="color:rgba(0,0,0,0.3);font-size:10.5px;margin-top:5px;">${p.h3}</div>`;
+          }
         }else if(p.metric===IMB){
           const imb=Number(p.value).toFixed(3);
           const impPct=(Number(p.impShare)*100).toFixed(4);
