@@ -200,10 +200,11 @@ function _aggregateRowsByCell(rows,resolution){
   for(let i=0;i<rows.length;i++){
     const r=rows[i];
     const cell=h3Cell(r.lat,r.lon,resolution);
-    const cur=agg.get(cell)||{imp:0,clk:0,ord:0,count:0,indices:[]};
+    const cur=agg.get(cell)||{imp:0,clk:0,ord:0,gmv:0,count:0,indices:[]};
     cur.imp+=r[IMP]||0;
     cur.clk+=r[CLK]||0;
     cur.ord+=r[ORD]||0;
+    cur.gmv+=r[GMV]||0;
     cur.count+=1;
     cur.indices.push(i);
     agg.set(cell,cur);
@@ -304,6 +305,7 @@ function renderDiffComparison(){
     return true;
   }
   const isSD=metric==="供需";
+  const isSDGMV=metric==="供需·GMV";
   const isDiffIMB=metric==="失衡系数";
   let globalRatio,totalMainAll=0,totalCompAll=0;
   let totalMainImp=0,totalMainOrd=0,totalCompImp=0,totalCompOrd=0;
@@ -312,10 +314,12 @@ function renderDiffComparison(){
     totalMainOrd=[...mainAgg.values()].reduce((s,v)=>s+(v.ord||0),0);
     totalCompImp=[...compareAgg.values()].reduce((s,v)=>s+(v.imp||0),0);
     totalCompOrd=[...compareAgg.values()].reduce((s,v)=>s+(v.ord||0),0);
-  }else if(isSD){
-    const tmi=cells.reduce((s,c)=>s+((mainAgg.get(c)?.imp)||0),0),tmo=cells.reduce((s,c)=>s+((mainAgg.get(c)?.ord)||0),0);
-    const tci=cells.reduce((s,c)=>s+((compareAgg.get(c)?.imp)||0),0),tco=cells.reduce((s,c)=>s+((compareAgg.get(c)?.ord)||0),0);
-    const gcrM=tmi>0?tmo/tmi:0,gcrC=tci>0?tco/tci:0;
+  }else if(isSD||isSDGMV){
+    const tmi=cells.reduce((s,c)=>s+((mainAgg.get(c)?.imp)||0),0);
+    const tmv=isSDGMV?cells.reduce((s,c)=>s+((mainAgg.get(c)?.gmv)||0),0):cells.reduce((s,c)=>s+((mainAgg.get(c)?.ord)||0),0);
+    const tci=cells.reduce((s,c)=>s+((compareAgg.get(c)?.imp)||0),0);
+    const tcv=isSDGMV?cells.reduce((s,c)=>s+((compareAgg.get(c)?.gmv)||0),0):cells.reduce((s,c)=>s+((compareAgg.get(c)?.ord)||0),0);
+    const gcrM=tmi>0?tmv/tmi:0,gcrC=tci>0?tcv/tci:0;
     globalRatio=gcrM>0?gcrC/gcrM:1;
   }else{
     totalMainAll=[...mainAgg.values()].reduce((s,v)=>s+(v[metricField]||0),0);
@@ -324,8 +328,8 @@ function renderDiffComparison(){
   }
   const tmp=[];
   cells.forEach((cell)=>{
-    const a=mainAgg.get(cell)||{imp:0,clk:0,ord:0,count:0,indices:[]};
-    const b=compareAgg.get(cell)||{imp:0,clk:0,ord:0,count:0,indices:[]};
+    const a=mainAgg.get(cell)||{imp:0,clk:0,ord:0,gmv:0,count:0,indices:[]};
+    const b=compareAgg.get(cell)||{imp:0,clk:0,ord:0,gmv:0,count:0,indices:[]};
     let delta;
     if(isDiffIMB){
       const mImb=Math.abs((totalMainOrd>0?(a.ord/totalMainOrd):0)-(totalMainImp>0?(a.imp/totalMainImp):0))*100;
@@ -333,6 +337,11 @@ function renderDiffComparison(){
       delta=cImb-mImb; // 负 = 对比期更均衡
     }else if(isSD){
       const crM=a.imp>0?a.ord/a.imp:0,crC=b.imp>0?b.ord/b.imp:0;
+      delta=diffMode==="relative"
+        ?(crM>0?((crC-crM*globalRatio)/(crM*globalRatio)*100):(crC>0?100:0))
+        :((crC-crM)*10000);
+    }else if(isSDGMV){
+      const crM=a.imp>0?a.gmv/a.imp:0,crC=b.imp>0?b.gmv/b.imp:0;
       delta=diffMode==="relative"
         ?(crM>0?((crC-crM*globalRatio)/(crM*globalRatio)*100):(crC>0?100:0))
         :((crC-crM)*10000);
@@ -357,8 +366,8 @@ function renderDiffComparison(){
       type:"Feature",
       properties:{
         h3:cell,metric:`对比-${metric}`,diffMode,bin,value:d,
-        preVal:isDiffIMB?mImb:isSD?(a.imp>0?a.ord/a.imp:0):(totalMainAll>0?(a[metricField]||0)/totalMainAll:0),
-        postVal:isDiffIMB?cImb:isSD?(b.imp>0?b.ord/b.imp:0):(totalCompAll>0?(b[metricField]||0)/totalCompAll:0),
+        preVal:isDiffIMB?mImb:isSD?(a.imp>0?a.ord/a.imp:0):isSDGMV?(a.imp>0?a.gmv/a.imp:0):(totalMainAll>0?(a[metricField]||0)/totalMainAll:0),
+        postVal:isDiffIMB?cImb:isSD?(b.imp>0?b.ord/b.imp:0):isSDGMV?(b.imp>0?b.gmv/b.imp:0):(totalCompAll>0?(b[metricField]||0)/totalCompAll:0),
         preImp:a.imp||0,postImp:b.imp||0,preCount:a.count||0,postCount:b.count||0,
         mainIndices:JSON.stringify(a.indices||[]),compareIndices:JSON.stringify(b.indices||[])
       },
@@ -377,8 +386,9 @@ function renderDiffComparison(){
   el("statCells").textContent=features.length.toLocaleString();
   el("statSumLabel").textContent="上升 / 下降 / 平稳";
   el("statSum").textContent=`${rise} / ${fall} / ${flat}`;
-  const ratioTxt=Number.isFinite(globalRatio)?`，全城${isSD?"CR":"总量"}倍率=${globalRatio.toFixed(3)}x`:"";
-  el("evtInfo").textContent=`对比模式：${DIFF_MODE_LABEL[diffMode]}（对比-主），指标=${metric}${isSD?"（CR变化：蓝=过曝趋势，红=欠曝趋势）":""}，仅展示主数据曝光≥${minImp}的格子${diffMode==="relative"?ratioTxt:""}。`;
+  const isSDLike=isSD||isSDGMV;
+  const ratioTxt=Number.isFinite(globalRatio)?`，全城${isSD?"CR":isSDGMV?"GMV率":"总量"}倍率=${globalRatio.toFixed(3)}x`:"";
+  el("evtInfo").textContent=`对比模式：${DIFF_MODE_LABEL[diffMode]}（对比-主），指标=${metric}${isSDLike?"（蓝=过曝趋势收窄，红=欠曝趋势加剧）":""}，仅展示主数据曝光≥${minImp}的格子${diffMode==="relative"?ratioTxt:""}。`;
   el("evtInfo").classList.remove("hidden");
   return true;
 }
