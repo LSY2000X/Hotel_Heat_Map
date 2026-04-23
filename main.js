@@ -1143,9 +1143,8 @@ function aggregateAndRender(){
       el("statSumLabel").textContent="失衡系数均值";el("statSum").textContent="—";
     }else{
       const imbVals=entriesMeet.map(([,v])=>Math.abs((v.ord/tOrd)-(v.imp/tImp))*100);
-      const maxImb=Math.max(...imbVals,0.0001);
       const binN=IMB_PALETTE.length;
-      thresholds=Array.from({length:binN-1},(_,i)=>(i+1)/binN*maxImb);
+      thresholds=computeThresholds(imbVals,binN,"quantile");
       features=entriesMeet.map(([idx,v],i)=>({
         type:"Feature",
         properties:{h3:idx,metric,value:imbVals[i],impShare:tImp>0?v.imp/tImp:0,ordShare:tOrd>0?v.ord/tOrd:0,imp:v.imp,clk:v.clk,ord:v.ord,count:v.count,hotelIndices:JSON.stringify(v.indices),bin:assignBin(imbVals[i],thresholds,binN)},
